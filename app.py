@@ -12,9 +12,9 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V21.0", layout="wide", page_icon="📈")
+st.set_page_config(page_title="GOD MODE V23.0", layout="wide", page_icon="👑")
 
-# --- SECURITY & SECRETS ---
+# --- SECURITY ---
 try:
     TELE_TOKEN = st.secrets["TELE_TOKEN"]
     TELE_CHAT_ID = st.secrets["TELE_CHAT_ID"]
@@ -22,9 +22,10 @@ except:
     TELE_TOKEN = "8457858315:AAGPSHq0UsfPv8MZ733tHs40gAOxwvx7G0o"
     TELE_CHAT_ID = "5916986433"
 
-# --- DATABASE WATCHLIST ---
+# --- DATABASE ---
 if 'history_log' not in st.session_state:
-    st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Entry', 'Target', 'Status'])
+    # Ditambahkan 'High_Water_Mark' untuk Trailing Stop Profesional
+    st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Entry', 'High_Water_Mark', 'Trailing_SL', 'Status'])
 
 # --- UI STYLING ---
 st.markdown("""
@@ -32,121 +33,167 @@ st.markdown("""
     .main { background-color: #0d1117; }
     .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
     .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #30363d; color: white; }
-    .bg-opti { background: linear-gradient(135deg, #1e1b4b 0%, #1e3a8a 100%); border-top: 5px solid #3b82f6; }
+    .bg-apex { background: linear-gradient(135deg, #0f172a 0%, #000000 100%); border-top: 5px solid #fbbf24; }
     .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; }
+    .badge-pro { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- OPTIMIZER MODULE: ATR CALCULATION ---
-def calculate_atr_metrics(df, n=14):
-    try:
-        high_low = df['High'] - df['Low']
-        high_close = np.abs(df['High'] - df['Close'].shift())
-        low_close = np.abs(df['Low'] - df['Close'].shift())
-        ranges = pd.concat([high_low, high_close, low_close], axis=1)
-        true_range = np.max(ranges, axis=1)
-        atr = true_range.rolling(n).mean().iloc[-1]
-        
-        last_price = df['Close'].iloc[-1]
-        # Volatility Factor (Berapa % pergerakan harian rata-rata)
-        vol_factor = (atr / last_price) * 100
-        return round(atr, 2), round(vol_factor, 2)
-    except:
-        return 0, 0
+# --- INSTITUTIONAL ENGINES ---
 
-# --- SENTINEL MODULE ---
-def check_profit_targets():
+# 1. Market Breadth & Global Data
+@st.cache_data(ttl=300)
+def get_ihsg_data():
+    try: return yf.Ticker("^JKSE").history(period="3mo")
+    except: return pd.DataFrame()
+
+# 2. Relative Strength (RS) vs IHSG (Apakah saham ini Pemimpin Pasar?)
+def calculate_relative_strength(stock_df, ihsg_df):
+    try:
+        stock_ret = (stock_df['Close'].iloc[-1] - stock_df['Close'].iloc[-20]) / stock_df['Close'].iloc[-20]
+        ihsg_ret = (ihsg_df['Close'].iloc[-1] - ihsg_df['Close'].iloc[-20]) / ihsg_df['Close'].iloc[-20]
+        rs_score = stock_ret - ihsg_ret # Alpha Generation
+        return round(rs_score * 100, 2)
+    except: return 0
+
+# 3. Multi-Timeframe Alignment (Weekly Trend Check)
+def check_mtfa_weekly(ticker):
+    try:
+        w_df = yf.Ticker(f"{ticker}.JK").history(period="1y", interval="1wk")
+        sma20_w = w_df['Close'].rolling(20).mean().iloc[-1]
+        is_uptrend = w_df['Close'].iloc[-1] > sma20_w
+        return is_uptrend
+    except: return False
+
+# 4. ATR & Chandelier Exit Calculation
+def calculate_atr(df, period=14):
+    try:
+        tr = np.maximum((df['High'] - df['Low']), 
+             np.maximum(abs(df['High'] - df['Close'].shift()), abs(df['Low'] - df['Close'].shift())))
+        return tr.rolling(period).mean().iloc[-1]
+    except: return 0.0
+
+# 5. Chandelier Trailing Stop Sentinel
+def check_chandelier_sentinel():
     if st.session_state['history_log'].empty: return
-    df = st.session_state['history_log']
-    for index, row in df.iterrows():
+    for index, row in st.session_state['history_log'].iterrows():
         if row['Status'] == 'OPEN':
             try:
                 t = yf.Ticker(f"{row['Ticker']}.JK")
-                cp = t.fast_info['last_price']
-                if cp >= row['Target']:
-                    msg = f"🎯 <b>OPTIMIZED TARGET HIT!</b>\nStock: <b>{row['Ticker']}</b>\nPrice: {int(cp)}\n\n<i>Cuan diamankan otomatis oleh Sentinel V21.</i>"
+                hist = t.history(period="1mo")
+                cp = hist['Close'].iloc[-1]
+                atr = calculate_atr(hist)
+                
+                # Update High Water Mark (Harga Tertinggi sejak beli)
+                current_hwm = max(row['High_Water_Mark'], cp)
+                st.session_state['history_log'].at[index, 'High_Water_Mark'] = current_hwm
+                
+                # Kalkulasi Trailing Stop (Chandelier = Highest High - 2.5 ATR)
+                new_trailing_sl = current_hwm - (atr * 2.5)
+                # Pastikan SL Trailing tidak pernah turun
+                final_sl = max(row['Trailing_SL'], new_trailing_sl)
+                st.session_state['history_log'].at[index, 'Trailing_SL'] = final_sl
+                
+                # Eksekusi Exit jika harga turun melewati Trailing Stop
+                if cp < final_sl:
+                    profit_pct = ((cp - row['Entry']) / row['Entry']) * 100
+                    msg = f"🛡️ <b>CHANDELIER EXIT TRIGGERED</b>\n\nStock: <b>{row['Ticker']}</b>\nEntry: {row['Entry']}\nExit Price: {int(cp)}\nProfit/Loss: <b>{round(profit_pct, 2)}%</b>\n\n<i>Posisi ditutup oleh sistem Trailing Stop Profesional.</i>"
                     requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": msg, "parse_mode": "HTML"})
-                    st.session_state['history_log'].at[index, 'Status'] = 'HIT'
+                    st.session_state['history_log'].at[index, 'Status'] = 'CLOSED'
             except: continue
 
 # --- UI HEADER ---
+ihsg_df = get_ihsg_data()
+ihsg_safe = ihsg_df['Close'].iloc[-1] > ihsg_df['Close'].rolling(20).mean().iloc[-1] if not ihsg_df.empty else True
+
 st.markdown(f"""
-    <div class='status-card bg-opti'>
-        <h1 style='margin:0;'>📈 GOD MODE V21.0: OPTIMIZER</h1>
-        <p style='margin:0; opacity:0.8;'>Volatility-Adjusted Targets | ATR Intel | Sentinel Active</p>
+    <div class='status-card bg-apex'>
+        <h1 style='margin:0; color:#fbbf24;'>👑 GOD MODE V23.0: INSTITUTIONAL APEX</h1>
+        <p style='margin:0; opacity:0.8; color:#e2e8f0;'>Multi-Timeframe | Relative Strength | Chandelier Trailing Stop</p>
     </div>
     """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("⚙️ Optimization Settings")
-    atr_multiplier = st.slider("ATR Multiplier (Risk)", 1.5, 3.0, 2.0, help="Semakin besar, semakin jauh Stop Loss (cocok untuk saham lincah).")
-    rr_ratio = st.slider("Reward Ratio", 1.5, 4.0, 2.5, help="Target profit adalah X kali lipat dari risiko Stop Loss.")
+    st.header("⚙️ Pro Config")
+    capital = st.number_input("Portfolio Size (Rp)", value=5000000, step=1000000)
+    risk_pct = st.slider("Risk Per Trade (%)", 1.0, 3.0, 2.0, step=0.5)
+    strict_mtfa = st.toggle("Strict MTFA (Wajib Weekly Uptrend)", value=True)
     
     st.divider()
-    mode = st.radio("Radar Focus:", ["Blue Chip", "Small Cap"])
-    capital = st.number_input("Modal Trading (Rp)", value=2000000)
+    st.write("**Sentinel Portfolio (Chandelier Trailing):**")
+    st.dataframe(st.session_state['history_log'][st.session_state['history_log']['Status'] == 'OPEN'], use_container_width=True)
     
-    if st.button("🧹 Clear Watchlist"):
-        st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Entry', 'Target', 'Status'])
+    if st.button("🧹 Clear Portfolio"):
+        st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Entry', 'High_Water_Mark', 'Trailing_SL', 'Status'])
         st.rerun()
 
-# --- MASTER SCAN ---
-if st.button("🚀 EXECUTE OPTIMIZED SCAN", use_container_width=True, type="primary"):
-    with st.status("Calculating Volatility & Finding Gaps...", expanded=True) as status:
+# --- EXECUTION ENGINE ---
+if st.button("🚀 INITIATE INSTITUTIONAL SCAN", use_container_width=True, type="primary"):
+    with st.status("Running Institutional Algorithms...", expanded=True) as status:
         try:
-            check_profit_targets()
-            min_cap = 5e11 if "Blue" in mode else 5e10
-            max_price = 100000 if "Blue" in mode else 500
+            check_chandelier_sentinel() # Cek trailing stop portofolio lama
             
             q = (Query().set_markets('indonesia').select('name','close','change','volume','average_volume_10d_calc','SMA50','market_cap_basic','open','high','low')
-                 .where(Column('change') >= 1.5, Column('close') <= max_price))
-            
+                 .where(Column('change') >= 1.5, Column('close') > Column('SMA50')))
             _, df_raw = q.get_scanner_data()
             
             if not df_raw.empty:
                 df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0,1)
-                df_scan = df_raw[(df_raw['market_cap_basic'] >= min_cap) & (df_raw['v_ratio'] >= 1.2)]
-                df_scan = df_scan.sort_values('change', ascending=False).head(5).reset_index(drop=True)
+                # Filter Market Cap (Min 100 Miliar) & Volume Meledak
+                df_scan = df_raw[(df_raw['market_cap_basic'] >= 1e11) & (df_raw['v_ratio'] >= 1.5)]
+                df_scan = df_scan.sort_values('change', ascending=False).head(8).reset_index(drop=True)
                 
+                valid_stocks = 0
                 for idx, row in df_scan.iterrows():
-                    s_obj = yf.Ticker(f"{row['name']}.JK")
+                    if valid_stocks >= 3: break # Tampilkan max 3 saham paling sempurna
+                    
+                    t_sym = row['name']
+                    # 1. MTFA Check
+                    is_weekly_bull = check_mtfa_weekly(t_sym)
+                    if strict_mtfa and not is_weekly_bull: continue
+                    
+                    s_obj = yf.Ticker(f"{t_sym}.JK")
                     df_hist = s_obj.history(period="1y")
                     
                     if not df_hist.empty:
-                        atr_val, vol_pct = calculate_atr_metrics(df_hist)
+                        # 2. RS & ATR Check
+                        rs_score = calculate_relative_strength(df_hist, ihsg_df)
+                        atr = calculate_atr(df_hist)
+                        
                         lp = float(row['close'])
+                        sl_price = int(lp - (atr * 2.5)) # Initial Stop Loss
                         
-                        # --- DYNAMIC RISK-REWARD CALCULATION ---
-                        # SL = Harga - (ATR * Multiplier)
-                        # TP = Harga + ((Harga - SL) * RR Ratio)
-                        sl_dist = atr_val * atr_multiplier
-                        sl_final = int(lp - sl_dist)
-                        tp_final = int(lp + (sl_dist * rr_ratio))
+                        # Tambah ke Portfolio
+                        if t_sym not in st.session_state['history_log']['Ticker'].values:
+                            new_p = pd.DataFrame([[datetime.now().strftime('%H:%M'), t_sym, int(lp), int(lp), sl_price, 'OPEN']], 
+                                                columns=['Waktu', 'Ticker', 'Entry', 'High_Water_Mark', 'Trailing_SL', 'Status'])
+                            st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_p], ignore_index=True)
                         
-                        # Update Watchlist
-                        if row['name'] not in st.session_state['history_log']['Ticker'].values:
-                            new_h = pd.DataFrame([[datetime.now().strftime('%H:%M'), row['name'], int(lp), tp_final, 'OPEN']], 
-                                                columns=['Waktu', 'Ticker', 'Entry', 'Target', 'Status'])
-                            st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_h], ignore_index=True)
-                        
-                        # UI Card
-                        st.markdown(f"""<div class='stock-card'>
-                                <h2 style='margin:0;'>{row['name']} <span style='color:#3fb950; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
-                                <p style='margin:0;'>📊 Volatility: <b>{vol_pct}%</b> | ATR: <b>{atr_val}</b></p>
-                                </div>""", unsafe_allow_html=True)
+                        # UI Tampilan Institusi
+                        valid_stocks += 1
+                        st.markdown(f"""
+                            <div class='stock-card'>
+                                <h2 style='margin:0;'>{t_sym} <span style='color:#3fb950; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
+                                <p style='margin:10px 0;'>
+                                    <span class='badge-pro' style='background:#1f6feb; color:white;'>RS: {rs_score}% (vs IHSG)</span>
+                                    <span class='badge-pro' style='background:{"#238636" if is_weekly_bull else "#6e7681"}; color:white;'>MTFA Weekly: {"BULLISH" if is_weekly_bull else "WEAK"}</span>
+                                </p>
+                            </div>
+                        """, unsafe_allow_html=True)
                         
                         c1, c2, c3 = st.columns(3)
                         c1.metric("ENTRY", int(lp))
-                        c2.metric("OPTI-TARGET", tp_final, f"+{round(((tp_final-lp)/lp)*100,1)}%")
-                        c3.metric("OPTI-STOPLOSS", sl_final, f"{round(((sl_final-lp)/lp)*100,1)}%")
+                        c2.metric("INITIAL STOP", sl_price)
                         
-                        # Lot Calculation
-                        risk_rp = (lp - sl_final) * 100 # Risiko per 1 lot
-                        max_risk_allowed = capital * 0.02 # Pakai risk 2% modal
-                        lot = int(max_risk_allowed / risk_rp) if risk_rp > 0 else 0
+                        risk_rp = lp - sl_price
+                        lot = int(((capital * (risk_pct/100)) / risk_rp) / 100) if risk_rp > 0 else 0
+                        if not ihsg_safe: lot = int(lot/2)
                         
-                        st.info(f"💼 Execution: **Beli {lot} Lot** (Risk disesuaikan dengan nafas saham)")
+                        c3.metric("REC. LOT", lot)
+                        st.info("💡 **Strategi Chandelier:** Jangan jual sampai harga turun memotong garis Trailing SL di Sidebar.")
 
-                status.update(label="Optimization Scan Complete!", state="complete", expanded=False)
-        except Exception as e: st.error(f"Error: {e}")
+                status.update(label="Institutional Scan Complete!", state="complete", expanded=False)
+                if valid_stocks == 0: st.warning("Tidak ada saham yang lolos filter ketat Institusi (MTFA & RS). Sabar, simpan cash.")
+            else: st.info("Market sedang tidak menentu.")
+        except Exception as e: st.error(f"System Error: {e}")
