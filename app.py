@@ -112,7 +112,29 @@ if tombol_manual or mode_auto:
                 df['is_trap'] = df['upper_shadow'] > (2 * df['body'])
                 
                 # Urutkan berdasarkan kenaikan tertinggi
-                df = df.sort_values('change', ascending=False).reset_index(drop=True)
+                # --- ALGORITMA SORTING: TERBAIK KE TERJELEK ---
+                # Menggunakan Multi-Level Sorting Pandas
+                # True = Diurutkan dari bawah ke atas (False dulu baru True, artinya Aman dulu baru Trap)
+                # False = Diurutkan dari besar ke kecil (Angka terbesar di atas)
+                df = df.sort_values(
+                    by=['is_trap', 'change', 'vol_ratio'], 
+                    ascending=[True, False, False]
+                ).reset_index(drop=True)
+                
+                # --- MENAMPILKAN HASIL ---
+                if not df.empty:
+                    st.success(f"🔥 BINGO! Ditemukan {len(df)} Saham Jawara (Diurutkan dari Terbaik)!")
+                    
+                    for index, row in df.iterrows():
+                        with st.container():
+                            saham = row['name']
+                            naik = round(row['change'], 2)
+                            
+                            # Menambahkan Medali/Ranking agar terlihat jelas urutannya
+                            ranking = index + 1
+                            medali = "🏆" if ranking == 1 else ("🥈" if ranking == 2 else ("🥉" if ranking == 3 else "📌"))
+                            
+                            st.markdown(f"### {medali} Rank #{ranking}: **{saham}** 📈 +{naik}%")
                 
                 # --- MENAMPILKAN HASIL ---
                 if not df.empty:
