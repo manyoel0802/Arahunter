@@ -12,7 +12,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V17.0", layout="wide", page_icon="🔱")
+st.set_page_config(page_title="GOD MODE V17.1", layout="wide", page_icon="🔱")
 
 # --- SECURITY & SECRETS ---
 try:
@@ -34,21 +34,22 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATABASE HISTORY (V13) ---
+# --- DATABASE HISTORY ---
 if 'history_log' not in st.session_state:
     st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'Sentiment'])
 
-# --- MARKET BREADTH ENGINE (V16) ---
+# --- MARKET BREADTH ENGINE ---
 def get_market_breadth():
     try:
         ihsg = yf.Ticker("^JKSE").history(period="2mo")
+        if ihsg.empty: return True, 0
         curr = ihsg['Close'].iloc[-1]
         ma20 = ihsg['Close'].rolling(20).mean().iloc[-1]
         is_safe = curr > ma20
         return is_safe, round(((curr-ma20)/ma20)*100, 2)
     except: return True, 0
 
-# --- TAPE READING PROXY (V13 - Classic) ---
+# --- TAPE READING PROXY ---
 def get_tape_reading(df, v_ratio):
     try:
         body = abs(df['Close'].iloc[-1] - df['Open'].iloc[-1])
@@ -60,28 +61,28 @@ def get_tape_reading(df, v_ratio):
         return "NORMAL FLOW", "⚖️"
     except: return "NORMAL", "⚖️"
 
-# --- AI SENTIMENT ENGINE (V13 - Keyword Based) ---
+# --- AI SENTIMENT ENGINE (Fixed: Safe Title Access) ---
 def analyze_sentiment_classic(news):
     if not news: return "NEUTRAL", "⚪"
     pos = ['laba', 'naik', 'untung', 'kontrak', 'ekspansi', 'dividen', 'akuisisi', 'rekor', 'positif']
     neg = ['rugi', 'turun', 'anjlok', 'kasus', 'negatif', 'sanksi', 'suspensi']
     score = 0
     for n in news:
-        txt = n['title'].lower()
+        # Perbaikan utama: Menggunakan .get() agar tidak error 'title'
+        txt = n.get('title', '').lower()
+        if not txt: continue
         score += sum(1 for w in pos if w in txt)
         score -= sum(1 for w in neg if w in txt)
     if score > 0: return "BULLISH", "🟢"
     if score < 0: return "BEARISH", "🔴"
     return "NEUTRAL", "⚪"
 
-# --- FUNDAMENTAL & POC (V16 & V12) ---
+# --- ADVANCED METRICS ---
 def get_advanced_metrics(s_obj, df):
     try:
-        # Fundamental (V16)
         info = s_obj.info
         npm = info.get('profitMargins', 0) or 0
         der = (info.get('debtToEquity', 0) or 0) / 100
-        # POC Calculation (V12)
         df['Price_Bin'] = df['Close'].round(-1)
         poc = df.groupby('Price_Bin')['Volume'].sum().idxmax()
         return npm, der, poc
@@ -92,12 +93,12 @@ is_bull, mkt_diff = get_market_breadth()
 header_class = "bg-bull" if is_bull else "bg-bear"
 st.markdown(f"""
     <div class='status-card {header_class}'>
-        <h1 style='margin:0;'>🔱 GOD MODE V17.0: THE ULTIMATE</h1>
+        <h1 style='margin:0;'>🔱 GOD MODE V17.1</h1>
         <p style='margin:0;'>Market Status: <b>{'BULLISH (SAFE)' if is_bull else 'BEARISH (RISK)'}</b> ({mkt_diff}% from MA20)</p>
     </div>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR (Classic V13 Style) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("📋 Signal History")
     st.dataframe(st.session_state['history_log'].tail(10), use_container_width=True)
@@ -105,13 +106,14 @@ with st.sidebar:
         st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'Sentiment'])
         st.rerun()
     st.divider()
+    st.header("⚙️ Settings")
     capital = st.number_input("Modal Trading (Rp)", value=10000000)
     risk_pct = st.slider("Risiko Per Saham (%)", 1, 5, 2)
     strict_mode = st.toggle("Strict Filter (Profit Only)", value=False)
 
 # --- SCANNER EXECUTION ---
 if st.button("🚀 INITIATE ULTIMATE SCAN", use_container_width=True, type="primary"):
-    with st.status("Merging V1-V13 Intelligence...", expanded=True) as status:
+    with st.status("Engines Online: Scanning BEI Market...", expanded=True) as status:
         try:
             q = (Query().set_markets('indonesia').select('name','close','change','volume','average_volume_10d_calc','SMA50','market_cap_basic','open','high','low')
                  .where(Column('change') >= 2.0, Column('close') > Column('SMA50')))
@@ -122,7 +124,7 @@ if st.button("🚀 INITIATE ULTIMATE SCAN", use_container_width=True, type="prim
                 df_scan = df_raw[(df_raw['market_cap_basic'] >= 5e11) & (df_raw['v_ratio'] >= 1.5)]
                 df_scan = df_scan.sort_values('change', ascending=False).head(5).reset_index(drop=True)
                 
-                pesan_tele = f"🔱 <b>V17.0 ULTIMATE REPORT</b>\n"
+                pesan_tele = f"🔱 <b>V17.1 MASTER REPORT</b>\n"
                 
                 for idx, row in df_scan.iterrows():
                     s_obj = yf.Ticker(f"{row['name']}.JK")
@@ -133,14 +135,20 @@ if st.button("🚀 INITIATE ULTIMATE SCAN", use_container_width=True, type="prim
                         if strict_mode and npm <= 0: continue
                             
                         tape_label, tape_icon = get_tape_reading(df_hist, row['v_ratio'])
-                        ai_label, ai_icon = analyze_sentiment_classic(s_obj.news)
                         
-                        # Save to History
+                        # Fix: Safe news fetching
+                        try:
+                            raw_news = s_obj.news
+                        except:
+                            raw_news = []
+                            
+                        ai_label, ai_icon = analyze_sentiment_classic(raw_news)
+                        
+                        # Update History
                         new_log = pd.DataFrame([[datetime.now().strftime('%H:%M'), row['name'], int(row['close']), tape_label, ai_label]], 
                                               columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'Sentiment'])
                         st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_log], ignore_index=True)
                         
-                        # UI Card
                         st.markdown(f"""
                             <div class='stock-card'>
                                 <h2 style='margin:0;'>{row['name']} <span style='color:#3fb950; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
@@ -155,28 +163,34 @@ if st.button("🚀 INITIATE ULTIMATE SCAN", use_container_width=True, type="prim
                             last_p = float(row['close'])
                             sl, tp = int(last_p * 0.96), int(last_p * 1.12)
                             c1.metric("ENTRY", int(last_p))
-                            c2.metric("TARGET (12%)", tp)
-                            c3.metric("STOP LOSS (4%)", sl)
+                            c2.metric("TARGET", tp)
+                            c3.metric("STOP LOSS", sl)
                             
                             diff = last_p - sl
                             lot = int(((capital * (risk_pct/100)) / diff) / 100) if diff > 0 else 0
                             if not is_bull: lot = int(lot/2)
-                            st.info(f"💼 Action: **Buy {lot} Lot** {'(Reduced due to Market Risk)' if not is_bull else ''}")
+                            st.info(f"💼 Action: **Buy {lot} Lot**")
                             
                         with t2:
                             df_p = df_hist.tail(45)
                             fig = go.Figure(data=[go.Candlestick(x=df_p.index, open=df_p['Open'], high=df_p['High'], low=df_p['Low'], close=df_p['Close'])])
-                            # POC Line dari V12
                             fig.add_trace(go.Scatter(x=[df_p.index[0], df_p.index[-1]], y=[poc, poc], line=dict(color="cyan", width=2, dash="dot"), name="POC"))
                             fig.update_layout(margin=dict(l=0,r=0,t=0,b=0), height=300, xaxis_rangeslider_visible=False, template="plotly_dark")
                             st.plotly_chart(fig, use_container_width=True, key=f"chart_{row['name']}")
                             
                         with t3:
-                            for n in s_obj.news[:3]:
-                                st.markdown(f"• **{n['title']}** <br><small>{n['publisher']} | [Read Article]({n['link']})</small>", unsafe_allow_html=True)
+                            # Perbaikan: Safe display berita agar tidak error 'title'
+                            if not raw_news:
+                                st.write("No news available.")
+                            for n in raw_news[:3]:
+                                n_title = n.get('title', 'No Title Available')
+                                n_pub = n.get('publisher', 'Unknown')
+                                n_link = n.get('link', '#')
+                                st.markdown(f"• **{n_title}** <br><small>{n_pub} | [Read]({n_link})</small>", unsafe_allow_html=True)
                         
-                        pesan_tele += f"\n💎 <b>{row['name']}</b>\nFlow: {tape_icon} {tape_label}\nAI: {ai_icon} {ai_label}\nPlan: {int(last_p)} -> TP {tp}\n"
+                        pesan_tele += f"\n💎 <b>{row['name']}</b>\nFlow: {tape_icon} {tape_label} | AI: {ai_icon}\nPlan: {int(last_p)} -> TP {tp}\n"
                 
                 requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
-                status.update(label="V17.0 Ultimate Scan Complete!", state="complete", expanded=False)
-        except Exception as e: st.error(f"Engine Error: {e}")
+                status.update(label="Scan Complete!", state="complete", expanded=False)
+            else: st.warning("No matches found.")
+        except Exception as e: st.error(f"System Error: {e}")
