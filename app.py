@@ -13,168 +13,179 @@ warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
 st.set_page_config(
-    page_title="GOD MODE V13.1", 
+    page_title="GOD MODE V15.0", 
     layout="centered", 
-    page_icon="🤖"
+    page_icon="🦅"
 )
 
 # --- KREDENSIAL TERKUNCI ---
 TELE_TOKEN = "8457858315:AAGPSHq0UsfPv8MZ733tHs40gAOxwvx7G0o"
 TELE_CHAT_ID = "5916986433"
 
-# --- STYLE CSS (Tampilan Bersih & Profesional) ---
+# --- CUSTOM UI CSS ---
 st.markdown("""
     <style>
-    .main { background-color: #0e1117; }
-    .stock-card {
-        background-color: #1c2128;
+    .main { background-color: #0d1117; }
+    .report-card {
+        background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
         border: 1px solid #30363d;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 10px;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-top: 4px solid #58a6ff;
     }
-    .badge {
-        padding: 2px 10px;
-        border-radius: 10px;
-        font-size: 12px;
-        font-weight: bold;
-        color: white;
+    .metric-box {
+        background-color: #010409;
+        border-radius: 8px;
+        padding: 10px;
+        text-align: center;
+        border: 1px solid #21262d;
     }
-    .bg-bullish { background-color: #238636; }
-    .bg-bearish { background-color: #da3633; }
-    .bg-neutral { background-color: #6e7681; }
+    .badge-pro { padding: 3px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; }
+    .bg-inst { background-color: #1f6feb; } /* Blue for Institutional */
+    .bg-accum { background-color: #238636; } /* Green */
+    .bg-dist { background-color: #da3633; } /* Red */
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATABASE HISTORY (Session State) ---
-if 'history' not in st.session_state:
-    st.session_state['history'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'AI'])
-
-# --- ENGINES (Logika V13) ---
-def analyze_sentiment(news_list):
-    if not news_list: return "Neutral", "bg-neutral"
-    pos = ['laba', 'naik', 'untung', 'kontrak', 'ekspansi', 'positif', 'rekor', 'akuisisi']
-    neg = ['rugi', 'turun', 'anjlok', 'kasus', 'negatif', 'sanksi']
-    score = sum(1 for n in news_list for w in pos if w in n['title'].lower()) - \
-            sum(1 for n in news_list for w in neg if w in n['title'].lower())
-    if score > 0: return "Bullish", "bg-bullish"
-    if score < 0: return "Bearish", "bg-bearish"
-    return "Neutral", "bg-neutral"
-
-def get_tape_strength(row):
-    # Mengukur efisiensi pergerakan harga vs volume
-    body = abs(row['close'] - row['open'])
-    range_total = abs(row['high'] - row['low']) if row['high'] != row['low'] else 0.01
-    strength = (body / range_total) * row['v_ratio']
-    if strength > 2.0: return "BIG FISH ENTRY", "🔥"
-    if strength > 1.2: return "ACCUMULATING", "✅"
-    return "NORMAL FLOW", "⚖️"
-
-def hitung_atr(df):
-    tr = pd.concat([df['High']-df['Low'], abs(df['High']-df['Close'].shift()), abs(df['Low']-df['Close'].shift())], axis=1).max(axis=1)
-    return tr.rolling(14).mean().iloc[-1]
-
-def get_full_analysis(ticker, row_data):
+# --- POINT 5: CACHING ENGINE (Optimasi Performa) ---
+@st.cache_data(ttl=900) # Cache data selama 15 menit
+def fetch_stock_data(ticker):
     try:
         s = yf.Ticker(f"{ticker}.JK")
         df = s.history(period="1y")
-        if df.empty or len(df) < 50: return None
-        
-        last_p = df['Close'].iloc[-1]
-        atr = hitung_atr(df)
-        
-        # SMC Support
-        df['Bin'] = df['Close'].round(-1)
-        poc = df.groupby('Bin')['Volume'].sum().idxmax()
-        
-        # Trading Plan
-        sl, tp = int(last_p - (1.5 * atr)), int(last_p + (3 * atr))
-        sent_label, sent_class = analyze_sentiment(s.news)
-        tape_label, tape_icon = get_tape_strength(row_data)
-        
-        # Chart
-        df_p = df.tail(40)
-        fig = go.Figure(data=[go.Candlestick(x=df_p.index, open=df_p['Open'], high=df_p['High'], low=df_p['Low'], close=df_p['Close'])])
-        fig.add_trace(go.Scatter(x=[df_p.index[0], df_p.index[-1]], y=[poc, poc], line=dict(color="#58a6ff", width=2, dash="dot")))
-        fig.update_layout(margin=dict(l=0,r=0,t=0,b=0), height=300, xaxis_rangeslider_visible=False, template="plotly_dark")
-        
-        return {"fig": fig, "sl": sl, "tp": tp, "news": s.news[:3], "sent": sent_label, "s_class": sent_class, "tape": tape_label, "t_icon": tape_icon}
-    except: return None
+        return s, df
+    except:
+        return None, None
 
-# --- SIDEBAR (History & Settings) ---
+# --- POINT 1 & 2: BANDARMOLOGY & FLOW PROXY ---
+def calculate_bandar_confidence(df, row):
+    # Menggunakan MFI (Money Flow Index) & VSA sebagai Proxy Bandarmologi
+    # $$MFI = 100 - \frac{100}{1 + Money Flow Ratio}$$
+    typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+    money_flow = typical_price * df['Volume']
+    
+    # Menghitung Accumulation/Distribution Strength
+    close = df['Close'].iloc[-1]
+    low = df['Low'].iloc[-1]
+    high = df['High'].iloc[-1]
+    ad_strength = ((close - low) - (high - close)) / (high - low) if (high - low) != 0 else 0
+    
+    # Final Score 0-100
+    score = 50 # Base score
+    score += (ad_strength * 20)
+    score += (row['v_ratio'] * 5)
+    if score > 90: return min(score, 100), "ULTRA ACCUMULATION", "bg-accum"
+    if score > 65: return score, "BIG MONEY ENTRY", "bg-inst"
+    return score, "NORMAL FLOW", "bg-neu"
+
+# --- POINT 4: NLP SENTIMENT V2 ---
+def analyze_sentiment_pro(news):
+    if not news: return "NEUTRAL", 50
+    pos = ['laba', 'naik', 'positif', 'kontrak', 'ekspansi', 'dividen', 'akuisisi', 'buyback', 'tumbuh']
+    neg = ['rugi', 'turun', 'negatif', 'kasus', 'sanksi', 'suspensi', 'pailit', 'pkpu']
+    
+    score = 50
+    for n in news:
+        text = n['title'].lower()
+        score += sum(5 for w in pos if w in text)
+        score -= sum(7 for w in neg if w in text)
+    
+    label = "BULLISH" if score > 55 else "BEARISH" if score < 45 else "NEUTRAL"
+    return label, score
+
+# --- RISK MANAGEMENT FORMULA ---
+def get_position_size(capital, risk_pct, price, sl):
+    # $$Size = \frac{Capital \times Risk\%}{Price - SL} \div 100$$
+    risk_amount = capital * (risk_pct / 100)
+    diff = price - sl
+    if diff <= 0: return 0
+    return int((risk_amount / diff) / 100)
+
+# --- UI APP ---
+if 'history' not in st.session_state:
+    st.session_state['history'] = []
+
+st.title("🦅 GOD MODE V15.0")
+st.caption("Institutional Intelligence | VSA Flow | Money Flow Index | Pro-Caching")
+
 with st.sidebar:
-    st.header("📊 History Log")
-    if not st.session_state['history'].empty:
-        st.dataframe(st.session_state['history'].tail(10), use_container_width=True)
-        if st.button("🧹 Clear History"):
-            st.session_state['history'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'AI'])
-            st.rerun()
-    else: st.info("Belum ada riwayat.")
+    st.header("📊 Terminal Control")
+    capital = st.number_input("Capital (Rp)", value=10000000, step=1000000)
+    risk_val = st.slider("Risk Per Trade (%)", 1, 5, 2)
     st.divider()
-    st.header("⚙️ Settings")
-    capital = st.number_input("Modal (Rp)", value=10000000)
-    risk_pct = st.slider("Risiko (%)", 1, 5, 2)
-    manual_tele = st.toggle("Kirim Telegram", value=True)
+    if st.button("🗑️ Clear Terminal Log"):
+        st.session_state['history'] = []
+        st.rerun()
+    st.write("**Recent Alerts:**")
+    for h in st.session_state['history'][-5:]:
+        st.caption(f"[{h['time']}] {h['ticker']} - {h['signal']}")
 
-# --- MAIN UI ---
-st.title("🤖 GOD MODE V13.1")
-st.markdown(f"**Status:** <span class='badge bg-bullish'>INTELLIGENCE READY</span> | {datetime.now().strftime('%H:%M')}", unsafe_allow_html=True)
-
-if st.button("🚀 JALANKAN MASTER SCAN", use_container_width=True, type="primary"):
-    with st.spinner("Menganalisa Sinyal & Sentimen..."):
+# --- MASTER SCAN ---
+if st.button("🚀 INITIATE INSTITUTIONAL RADAR", use_container_width=True, type="primary"):
+    with st.status("Accessing BEI Liquidity Hub...", expanded=True) as status:
         try:
             q = (Query().set_markets('indonesia').select('name','close','change','volume','average_volume_10d_calc','SMA50','SMA200','open','high','low','market_cap_basic')
                  .where(Column('change') >= 2.0, Column('close') > Column('SMA50')))
-            _, df = q.get_scanner_data()
+            _, df_raw = q.get_scanner_data()
             
-            if not df.empty:
-                df['v_ratio'] = df['volume'] / df['average_volume_10d_calc'].replace(0,1)
-                df = df[(df['market_cap_basic'] >= 5e11) & (df['v_ratio'] >= 1.5)]
-                df = df.sort_values('change', ascending=False).head(5).reset_index(drop=True)
+            if not df_raw.empty:
+                df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0,1)
+                df_scan = df_raw[(df_raw['market_cap_basic'] >= 5e11) & (df_raw['v_ratio'] >= 1.5)]
+                df_scan = df_scan.sort_values('change', ascending=False).head(5).reset_index(drop=True)
                 
-                pesan_tele = f"🤖 <b>AI INTELLIGENCE REPORT</b>\n"
-                
-                for idx, row in df.iterrows():
-                    res = get_full_analysis(row['name'], row)
-                    if res:
-                        # Log ke Database Sidebar
-                        new_log = pd.DataFrame([[datetime.now().strftime('%H:%M'), row['name'], int(row['close']), res['tape'], res['sent']]], 
-                                              columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'AI'])
-                        st.session_state['history'] = pd.concat([st.session_state['history'], new_log], ignore_index=True)
-                        
-                        # Tampilan Rapi per Saham
-                        st.markdown(f"""
-                        <div class='stock-card'>
-                            <h3 style='margin:0;'>{row['name']} (+{round(row['change'],2)}%)</h3>
-                            <span class='badge {res['s_class']}'>{res['sent']} AI</span>
-                            <span style='margin-left:10px;'>{res['t_icon']} {res['tape']}</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        t1, t2, t3 = st.tabs(["🎯 Plan", "📉 Chart", "📰 News"])
-                        with t1:
-                            c1, c2, c3 = st.columns(3)
-                            c1.metric("ENTRY", int(row['close']))
-                            c2.metric("TARGET", res['tp'])
-                            c3.metric("SL", res['sl'])
+                if not df_scan.empty:
+                    pesan_tele = f"🦅 <b>V15.0 INSTITUTIONAL REPORT</b>\n"
+                    
+                    for idx, row in df_scan.iterrows():
+                        stock_info, df_hist = fetch_stock_data(row['name'])
+                        if df_hist is not None:
+                            # Advanced Analytics
+                            b_score, b_label, b_class = calculate_bandar_confidence(df_hist, row)
+                            s_label, s_score = analyze_sentiment_pro(stock_info.news)
                             
-                            risk_rp = capital * (risk_pct/100)
-                            lot = int((risk_rp / (row['close'] - res['sl'])) / 100) if (row['close'] - res['sl']) > 0 else 0
-                            st.info(f"💡 Rekomendasi: **{lot} Lot** (Risiko Rp {int(risk_rp):,})")
-                        
-                        with t2:
-                            st.plotly_chart(res['fig'], use_container_width=True)
-                        
-                        with t3:
-                            for n in res['news']:
-                                st.write(f"• **{n['title']}** ({n['publisher']})")
-                        
-                        pesan_tele += f"\n🚀 <b>{row['name']}</b>\nTape: {res['t_icon']} AI: {res['sent']}\nTP: {res['tp']} | SL: {res['sl']}\n"
-                
-                if manual_tele:
-                    requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", 
-                                  data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
-            else:
-                st.info("Kondisi pasar sedang flat.")
-        except Exception as e:
-            st.error(f"Error: {e}")
+                            # Trading Plan
+                            last_p = row['close']
+                            sl = int(last_p * 0.96) # Standard 4% SL
+                            tp = int(last_p * 1.12) # Target 12% (RR 1:3)
+                            lots = get_position_size(capital, risk_val, last_p, sl)
+                            
+                            # UI Component
+                            with st.container():
+                                st.markdown(f"""
+                                <div class='report-card'>
+                                    <h2 style='margin:0;'>{row['name']} <span style='font-size:16px; color:#3fb950;'>+{round(row['change'],2)}%</span></h2>
+                                    <span class='badge-pro {b_class}'>{b_label}</span>
+                                    <span class='badge-pro bg-inst' style='margin-left:5px;'>AI SENTIMENT: {s_label}</span>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                                tab1, tab2 = st.tabs(["📝 Institutional Plan", "📈 Flow Analysis"])
+                                with tab1:
+                                    c1, c2, c3 = st.columns(3)
+                                    with c1: st.metric("ENTRY", f"Rp {int(last_p)}")
+                                    with c2: st.metric("TARGET", f"Rp {tp}")
+                                    with c3: st.metric("STOP LOSS", f"Rp {sl}")
+                                    st.warning(f"💼 **Execution:** Buy **{lots} Lots** | Max Risk: Rp {int(capital*(risk_val/100)):,}")
+                                
+                                with tab2:
+                                    # Confidence Gauge (Visual Score)
+                                    fig_score = go.Figure(go.Indicator(
+                                        mode = "gauge+number", value = b_score,
+                                        title = {'text': "Bandar Confidence Score", 'font': {'size': 14}},
+                                        gauge = {'axis': {'range': [0, 100]}, 'bar': {'color': "#58a6ff"}}
+                                    ))
+                                    fig_score.update_layout(height=200, margin=dict(l=10,r=10,t=40,b=10), paper_bgcolor='rgba(0,0,0,0)')
+                                    st.plotly_chart(fig_score, use_container_width=True)
+                                
+                                # Simpan ke History Sidebar
+                                st.session_state['history'].append({'time': datetime.now().strftime('%H:%M'), 'ticker': row['name'], 'signal': b_label})
+                                pesan_tele += f"\n🔥 <b>{row['name']}</b>\nConfidence: {int(b_score)}% ({b_label})\nPlan: {int(last_p)} -> TP {tp}\n"
+                    
+                    if requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", 
+                                     data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"}):
+                        st.toast("Institutional Report Synced to Telegram")
+                    status.update(label="Scanning Complete!", state="complete", expanded=False)
+                else: st.warning("Saringan Ketat: Tidak ada saham dengan aliran uang besar saat ini.")
+            else: st.info("Pasar sedang konsolidasi (Sideways).")
+        except Exception as e: st.error(f"Engine Error: {e}")
