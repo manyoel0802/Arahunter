@@ -8,34 +8,25 @@ import warnings
 from datetime import datetime
 from tradingview_screener import Query, Column
 
-# Konfigurasi Pandas
+# Konfigurasi Pandas & UI
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD TIER ARA Hunter", layout="wide", page_icon="👁️")
+st.set_page_config(page_title="GOD TIER ARA Hunter", layout="centered", page_icon="👁️")
 
 # --- KONFIGURASI TELEGRAM PERMANEN ---
 TELE_TOKEN = "8457858315:AAGPSHq0UsfPv8MZ733tHs40gAOxwvx7G0o"
 
-st.title("👁️ GOD TIER ARA Hunter (V10.1)")
-st.caption("Auto-Scan | Smart Money Concepts | Telegram Alert Enabled")
+st.title("👁️ GOD TIER ARA Hunter (V10.2)")
+st.caption("Optimized Performance | Top 5 Focus | Smart Money Support")
 
-# --- SIDEBAR UNTUK CHAT ID ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("📲 Notifikasi Telegram")
-    # Chat ID tetap perlu diinput atau bisa Anda ganti '12345678' di bawah dengan ID asli Anda
-    tele_chat_id = st.text_input("Masukkan Chat ID Anda:", placeholder="Contoh: 12345678")
+    tele_chat_id = st.text_input("Masukkan Chat ID Anda:", placeholder="Cek di @userinfobot")
     aktifkan_tele = st.toggle("Aktifkan Alarm Telegram", value=True)
-    st.info("Dapatkan Chat ID melalui bot @userinfobot di Telegram.")
-
-def kirim_telegram(pesan):
-    if aktifkan_tele and tele_chat_id:
-        url = f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage"
-        payload = {"chat_id": tele_chat_id, "text": pesan, "parse_mode": "HTML"}
-        try:
-            requests.post(url, data=payload, timeout=5)
-        except:
-            pass
+    st.divider()
+    st.info("Aplikasi sekarang hanya menampilkan 5 saham dengan skor tertinggi untuk menjaga akurasi analisa.")
 
 # --- UI PENGATURAN FILTER ---
 with st.expander("⚙️ Pengaturan Algoritma", expanded=False):
@@ -48,82 +39,135 @@ with st.expander("⚙️ Pengaturan Algoritma", expanded=False):
         min_vol_ratio = st.number_input("Min Vol Loncat (x)", value=1.5, step=0.5)
 
 # Mapping Market Cap
-min_mc_angka = {"Semua": 0, "Mulai Rp 500 M": 5e11, "Mulai Rp 1 T": 1e12, "Mulai Rp 10 T": 1e13}[opsi_mc]
+mc_map = {"Semua": 0, "Mulai Rp 500 M": 5e11, "Mulai Rp 1 T": 1e12, "Mulai Rp 10 T": 1e13}
+min_mc_angka = mc_map[opsi_mc]
 
 st.divider()
 
 col_btn, col_auto = st.columns([2, 1])
 with col_btn:
-    tombol_manual = st.button("🚀 EKSEKUSI RADAR", use_container_width=True, type="primary")
+    tombol_manual = st.button("🚀 SCAN TOP 5 SAHAM", use_container_width=True, type="primary")
 with col_auto:
     mode_auto = st.toggle("🔄 Auto-Scan 15 Menit")
 
-# --- FUNGSI SMART MONEY SUPPORT ---
+# --- FUNGSI TELEGRAM ---
+def kirim_telegram(pesan):
+    if aktifkan_tele and tele_chat_id:
+        url = f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage"
+        payload = {"chat_id": tele_chat_id, "text": pesan, "parse_mode": "HTML"}
+        try: requests.post(url, data=payload, timeout=5)
+        except: pass
+
+# --- FUNGSI SMART MONEY SUPPORT & CHART FIX ---
 def proses_smc(ticker):
     try:
         s = yf.Ticker(f"{ticker}.JK")
         df = s.history(period="6mo")
-        if df.empty: return None, 0
+        if df.empty or len(df) < 20: return None, 0
+        
+        # Hitung POC (Point of Control)
         df['Price_Bin'] = df['Close'].round(-1)
         poc_price = df.groupby('Price_Bin')['Volume'].sum().idxmax()
         
+        # Ambil 40 bar terakhir untuk grafik agar tidak terlalu padat
+        df_plot = df.tail(40)
+        
         fig = go.Figure()
-        fig.add_trace(go.Candlestick(x=df.index[-60:], open=df.index[-60:], high=df['High'][-60:], low=df['Low'][-60:], close=df['Close'][-60:], name="Harga"))
-        fig.add_trace(go.Scatter(x=[df.index[-60], df.index[-1]], y=[poc_price, poc_price], mode="lines", line=dict(color="cyan", width=2, dash="dot"), name="SMC Support"))
-        fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=300, xaxis_rangeslider_visible=False, template="plotly_dark")
+        fig.add_trace(go.Candlestick(
+            x=df_plot.index, 
+            open=df_plot['Open'], 
+            high=df_plot['High'], 
+            low=df_plot['Low'], 
+            close=df_plot['Close'], 
+            name="Price"
+        ))
+        
+        # Garis SMC Support
+        fig.add_trace(go.Scatter(
+            x=[df_plot.index[0], df_plot.index[-1]], 
+            y=[poc_price, poc_price], 
+            mode="lines", 
+            line=dict(color="cyan", width=2, dash="dot"), 
+            name="SMC Support"
+        ))
+        
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0), 
+            height=300, 
+            xaxis_rangeslider_visible=False, 
+            template="plotly_dark",
+            showlegend=False
+        )
         return fig, poc_price
-    except: return None, 0
+    except: 
+        return None, 0
 
 # --- LOGIKA UTAMA ---
 if tombol_manual or mode_auto:
     st.caption(f"Last Scan: {datetime.now().strftime('%H:%M:%S')} WIB")
     
     try:
+        # TradingView Scan
         query = (Query().set_markets('indonesia')
-                 .select('name', 'close', 'change', 'volume', 'average_volume_10d_calc', 'RSI', 'SMA50', 'SMA200', 'price_52_week_high', 'market_cap_basic', 'sector', 'open', 'high', 'low')
+                 .select('name', 'close', 'change', 'volume', 'average_volume_10d_calc', 'RSI', 'SMA50', 'open', 'high', 'low', 'market_cap_basic')
                  .where(Column('change') >= min_kenaikan, Column('close') > Column('SMA50')))
         
         _, df = query.get_scanner_data()
         
         if not df.empty:
+            # Filter Market Cap & Volume Ratio
             df = df[df['market_cap_basic'] >= min_mc_angka]
             df['vol_ratio'] = df['volume'] / df['average_volume_10d_calc'].replace(0, 1)
             df = df[df['vol_ratio'] >= min_vol_ratio]
             
-            # Anti-Trap & Sorting
+            # Anti-Trap Logic
             df['is_trap'] = (df['high'] - df[['open', 'close']].max(axis=1)) > (2 * abs(df['close'] - df['open']).replace(0, 0.01))
-            df = df.sort_values(by='change', ascending=False).reset_index(drop=True)
+            
+            # Sorting & LIMIT TOP 5
+            df = df.sort_values(by='change', ascending=False).head(5).reset_index(drop=True)
             
             if not df.empty:
-                st.success(f"👁️ Radar menemukan {len(df)} saham potensial.")
-                pesan_tele = f"👁️ <b>GOD TIER ALERT</b>\n🕒 {datetime.now().strftime('%H:%M')}\n\n"
+                st.success(f"🔥 Radar mengunci {len(df)} saham terbaik hari ini.")
+                pesan_tele = f"👁️ <b>TOP 5 GOD TIER ALERTS</b>\n🕒 {datetime.now().strftime('%H:%M')}\n\n"
                 
                 for idx, row in df.iterrows():
                     saham = row['name']
-                    fig, poc = proses_smc(saham)
+                    # Load chart & SMC
+                    with st.spinner(f"Menganalisa {saham}..."):
+                        fig, poc = proses_smc(saham)
                     
-                    # UI Streamlit
+                    # Tampilan UI
                     with st.container():
-                        st.subheader(f"Rank #{idx+1}: {saham} (+{round(row['change'],2)}%)")
-                        if row['is_trap']: st.error("⚠️ TRAP DETECTED")
-                        else: st.success("✅ CLEAN ACCUMULATION")
+                        medali = ["🏆", "🥈", "🥉", "📌", "📌"][idx]
+                        st.subheader(f"{medali} Rank #{idx+1}: {saham} (+{round(row['change'],2)}%)")
                         
-                        col_a, col_b, col_c = st.columns(3)
-                        col_a.metric("Harga", f"{int(row['close'])}")
-                        col_b.metric("SMC Support", f"{int(poc)}")
-                        col_c.metric("Vol Ratio", f"{round(row['vol_ratio'],1)}x")
+                        if row['is_trap']: st.error("⚠️ STATUS: TRAP DETECTED (Hati-hati Pucuk)")
+                        else: st.success("✅ STATUS: CLEAN ACCUMULATION (Siap Gas)")
                         
-                        if fig: st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Isi Pesan Tele (Hanya 3 teratas yang tidak trap)
-                    if idx < 3 and not row['is_trap']:
-                        pesan_tele += f"🚀 <b>{saham}</b>\nHarga: {int(row['close'])}\nNaik: {round(row['change'],2)}%\nSupport: {int(poc)}\n\n"
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric("Harga", f"{int(row['close'])}")
+                        c2.metric("SMC Support", f"{int(poc)}")
+                        c3.metric("Vol Ratio", f"{round(row['vol_ratio'],1)}x")
+                        
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning("Grafik tidak tersedia untuk saham ini.")
+                        
+                        # Data untuk Telegram
+                        if not row['is_trap']:
+                            pesan_tele += f"{medali} <b>{saham}</b>\nHarga: {int(row['close'])}\nNaik: {round(row['change'],2)}%\nSMC Support: {int(poc)}\n\n"
+                        
+                        st.divider()
                 
                 if aktifkan_tele: kirim_telegram(pesan_tele)
+            else:
+                st.info("Tidak ada saham yang menembus filter ketat saat ini.")
         else:
-            st.info("Belum ada sinyal terdeteksi.")
+            st.info("Pasar sedang sepi, belum ada sinyal.")
+            
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Terjadi kendala teknis: {e}")
 
 # --- TIMER ---
 if mode_auto:
