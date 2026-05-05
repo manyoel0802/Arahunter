@@ -12,9 +12,9 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V17.1", layout="wide", page_icon="🔱")
+st.set_page_config(page_title="GOD MODE V18.0", layout="wide", page_icon="🔱")
 
-# --- SECURITY & SECRETS ---
+# --- SECURITY ---
 try:
     TELE_TOKEN = st.secrets["TELE_TOKEN"]
     TELE_CHAT_ID = st.secrets["TELE_CHAT_ID"]
@@ -22,7 +22,7 @@ except:
     TELE_TOKEN = "8457858315:AAGPSHq0UsfPv8MZ733tHs40gAOxwvx7G0o"
     TELE_CHAT_ID = "5916986433"
 
-# --- UI CUSTOM STYLING ---
+# --- UI STYLING ---
 st.markdown("""
     <style>
     .main { background-color: #0d1117; }
@@ -30,167 +30,146 @@ st.markdown("""
     .status-card { border-radius: 15px; padding: 20px; margin-bottom: 20px; border: 1px solid #30363d; color: white; }
     .bg-bull { background: linear-gradient(135deg, #064e3b 0%, #1e293b 100%); }
     .bg-bear { background: linear-gradient(135deg, #7f1d1d 0%, #1e293b 100%); }
-    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 15px; margin-top: 15px; }
+    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 15px; margin-top: 15px; border-left: 5px solid #58a6ff; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- DATABASE HISTORY ---
 if 'history_log' not in st.session_state:
-    st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'Sentiment'])
+    st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Mode', 'Tape'])
 
-# --- MARKET BREADTH ENGINE ---
+# --- ENGINES ---
 def get_market_breadth():
     try:
         ihsg = yf.Ticker("^JKSE").history(period="2mo")
-        if ihsg.empty: return True, 0
         curr = ihsg['Close'].iloc[-1]
         ma20 = ihsg['Close'].rolling(20).mean().iloc[-1]
-        is_safe = curr > ma20
-        return is_safe, round(((curr-ma20)/ma20)*100, 2)
+        return (curr > ma20), round(((curr-ma20)/ma20)*100, 2)
     except: return True, 0
 
-# --- TAPE READING PROXY ---
 def get_tape_reading(df, v_ratio):
     try:
         body = abs(df['Close'].iloc[-1] - df['Open'].iloc[-1])
-        range_tot = abs(df['High'].iloc[-1] - df['Low'].iloc[-1])
-        range_tot = range_tot if range_tot != 0 else 0.01
+        range_tot = abs(df['High'].iloc[-1] - df['Low'].iloc[-1]) or 0.01
         strength = (body / range_tot) * v_ratio
-        if strength > 2.2: return "BIG FISH ENTRY", "🔥"
-        if strength > 1.3: return "ACCUMULATION", "✅"
+        if strength > 2.2: return "BIG MONEY FLOW", "🔥"
+        if strength > 1.2: return "ACCUMULATION", "✅"
         return "NORMAL FLOW", "⚖️"
     except: return "NORMAL", "⚖️"
 
-# --- AI SENTIMENT ENGINE (Fixed: Safe Title Access) ---
-def analyze_sentiment_classic(news):
+def analyze_sentiment(news):
     if not news: return "NEUTRAL", "⚪"
-    pos = ['laba', 'naik', 'untung', 'kontrak', 'ekspansi', 'dividen', 'akuisisi', 'rekor', 'positif']
-    neg = ['rugi', 'turun', 'anjlok', 'kasus', 'negatif', 'sanksi', 'suspensi']
+    pos = ['laba', 'naik', 'untung', 'kontrak', 'ekspansi', 'akuisisi', 'positif']
+    neg = ['rugi', 'turun', 'anjlok', 'kasus', 'negatif', 'sanksi']
     score = 0
     for n in news:
-        # Perbaikan utama: Menggunakan .get() agar tidak error 'title'
         txt = n.get('title', '').lower()
-        if not txt: continue
         score += sum(1 for w in pos if w in txt)
         score -= sum(1 for w in neg if w in txt)
-    if score > 0: return "BULLISH", "🟢"
-    if score < 0: return "BEARISH", "🔴"
-    return "NEUTRAL", "⚪"
-
-# --- ADVANCED METRICS ---
-def get_advanced_metrics(s_obj, df):
-    try:
-        info = s_obj.info
-        npm = info.get('profitMargins', 0) or 0
-        der = (info.get('debtToEquity', 0) or 0) / 100
-        df['Price_Bin'] = df['Close'].round(-1)
-        poc = df.groupby('Price_Bin')['Volume'].sum().idxmax()
-        return npm, der, poc
-    except: return 0, 0, df['Close'].mean()
+    return ("BULLISH", "🟢") if score > 0 else ("BEARISH", "🔴") if score < 0 else ("NEUTRAL", "⚪")
 
 # --- UI HEADER ---
 is_bull, mkt_diff = get_market_breadth()
 header_class = "bg-bull" if is_bull else "bg-bear"
-st.markdown(f"""
-    <div class='status-card {header_class}'>
-        <h1 style='margin:0;'>🔱 GOD MODE V17.1</h1>
-        <p style='margin:0;'>Market Status: <b>{'BULLISH (SAFE)' if is_bull else 'BEARISH (RISK)'}</b> ({mkt_diff}% from MA20)</p>
-    </div>
-    """, unsafe_allow_html=True)
+st.markdown(f"<div class='status-card {header_class}'><h1 style='margin:0;'>🔱 GOD MODE V18.0</h1><p style='margin:0;'>Market: <b>{'BULLISH' if is_bull else 'BEARISH'}</b> | Global Risk Check: {'OK' if is_bull else 'CAUTION'}</p></div>", unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (POINT PENTING: SELECTION MODE) ---
 with st.sidebar:
-    st.header("📋 Signal History")
-    st.dataframe(st.session_state['history_log'].tail(10), use_container_width=True)
-    if st.button("Clear Log"):
-        st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'Sentiment'])
-        st.rerun()
+    st.header("🎯 Radar Strategy")
+    radar_mode = st.radio("Pilih Fokus Radar:", 
+                          ["Blue Chip (Market Cap > 500B)", "Small Cap (Market Cap < 500B)"],
+                          help="Small Cap cocok untuk modal terbatas namun risiko lebih tinggi.")
+    
     st.divider()
-    st.header("⚙️ Settings")
-    capital = st.number_input("Modal Trading (Rp)", value=10000000)
-    risk_pct = st.slider("Risiko Per Saham (%)", 1, 5, 2)
-    strict_mode = st.toggle("Strict Filter (Profit Only)", value=False)
+    st.header("⚙️ Config")
+    capital = st.number_input("Modal Trading (Rp)", value=2000000, step=500000)
+    risk_pct = st.slider("Risk Per Trade (%)", 1, 5, 2)
+    
+    if st.button("🧹 Clear History"):
+        st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Harga', 'Mode', 'Tape'])
+        st.rerun()
 
-# --- SCANNER EXECUTION ---
-if st.button("🚀 INITIATE ULTIMATE SCAN", use_container_width=True, type="primary"):
-    with st.status("Engines Online: Scanning BEI Market...", expanded=True) as status:
+    st.write("**Recent Signals:**")
+    st.dataframe(st.session_state['history_log'].tail(10), use_container_width=True)
+
+# --- SCANNER LOGIC ---
+if st.button("🚀 EXECUTE RADAR SCAN", use_container_width=True, type="primary"):
+    with st.status(f"Scanning for {radar_mode}...", expanded=True) as status:
         try:
+            # Setting Parameter berdasarkan Pilihan User
+            if "Blue Chip" in radar_mode:
+                min_cap = 5e11 # 500 Miliar
+                max_price = 100000
+            else:
+                min_cap = 5e10 # 50 Miliar (Menangkap saham ENZO dkk)
+                max_price = 500 # Fokus saham murah di bawah Rp 500 agar lot dapat banyak
+            
             q = (Query().set_markets('indonesia').select('name','close','change','volume','average_volume_10d_calc','SMA50','market_cap_basic','open','high','low')
-                 .where(Column('change') >= 2.0, Column('close') > Column('SMA50')))
+                 .where(Column('change') >= 1.5, Column('close') <= max_price))
+            
             _, df_raw = q.get_scanner_data()
             
             if not df_raw.empty:
                 df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0,1)
-                df_scan = df_raw[(df_raw['market_cap_basic'] >= 5e11) & (df_raw['v_ratio'] >= 1.5)]
+                
+                # Filter Market Cap & Trend
+                if "Blue Chip" in radar_mode:
+                    df_scan = df_raw[(df_raw['market_cap_basic'] >= min_cap) & (df_raw['v_ratio'] >= 1.5)]
+                else:
+                    # Filter untuk Small Cap: Lebih longgar tapi tetap cari yang ada volume
+                    df_scan = df_raw[(df_raw['market_cap_basic'] < 5e11) & (df_raw['market_cap_basic'] >= min_cap) & (df_raw['v_ratio'] >= 1.2)]
+                
                 df_scan = df_scan.sort_values('change', ascending=False).head(5).reset_index(drop=True)
                 
-                pesan_tele = f"🔱 <b>V17.1 MASTER REPORT</b>\n"
-                
-                for idx, row in df_scan.iterrows():
-                    s_obj = yf.Ticker(f"{row['name']}.JK")
-                    df_hist = s_obj.history(period="1y")
+                if not df_scan.empty:
+                    pesan_tele = f"🔱 <b>V18.0 REPORT: {radar_mode}</b>\n"
                     
-                    if not df_hist.empty:
-                        npm, der, poc = get_advanced_metrics(s_obj, df_hist)
-                        if strict_mode and npm <= 0: continue
+                    for idx, row in df_scan.iterrows():
+                        s_obj = yf.Ticker(f"{row['name']}.JK")
+                        df_hist = s_obj.history(period="1y")
+                        
+                        if not df_hist.empty:
+                            tape_label, tape_icon = get_tape_reading(df_hist, row['v_ratio'])
+                            try: news = s_obj.news
+                            except: news = []
+                            ai_label, ai_icon = analyze_sentiment(news)
                             
-                        tape_label, tape_icon = get_tape_reading(df_hist, row['v_ratio'])
-                        
-                        # Fix: Safe news fetching
-                        try:
-                            raw_news = s_obj.news
-                        except:
-                            raw_news = []
+                            # Log History
+                            new_data = pd.DataFrame([[datetime.now().strftime('%H:%M'), row['name'], int(row['close']), radar_mode.split()[0], tape_label]], 
+                                                   columns=['Waktu', 'Ticker', 'Harga', 'Mode', 'Tape'])
+                            st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_data], ignore_index=True)
                             
-                        ai_label, ai_icon = analyze_sentiment_classic(raw_news)
-                        
-                        # Update History
-                        new_log = pd.DataFrame([[datetime.now().strftime('%H:%M'), row['name'], int(row['close']), tape_label, ai_label]], 
-                                              columns=['Waktu', 'Ticker', 'Harga', 'Tape', 'Sentiment'])
-                        st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_log], ignore_index=True)
-                        
-                        st.markdown(f"""
-                            <div class='stock-card'>
+                            # UI Card
+                            st.markdown(f"""<div class='stock-card'>
                                 <h2 style='margin:0;'>{row['name']} <span style='color:#3fb950; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
-                                <p style='margin-bottom:10px;'>{tape_icon} <b>{tape_label}</b> | {ai_icon} <b>AI: {ai_label}</b></p>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        t1, t2, t3 = st.tabs(["🎯 Strategy Plan", "📉 Chart Analysis", "📰 Live News"])
-                        
-                        with t1:
-                            c1, c2, c3 = st.columns(3)
-                            last_p = float(row['close'])
-                            sl, tp = int(last_p * 0.96), int(last_p * 1.12)
-                            c1.metric("ENTRY", int(last_p))
-                            c2.metric("TARGET", tp)
-                            c3.metric("STOP LOSS", sl)
+                                <p style='margin:0;'>{tape_icon} <b>{tape_label}</b> | {ai_icon} AI: {ai_label}</p>
+                                </div>""", unsafe_allow_html=True)
                             
-                            diff = last_p - sl
-                            lot = int(((capital * (risk_pct/100)) / diff) / 100) if diff > 0 else 0
-                            if not is_bull: lot = int(lot/2)
-                            st.info(f"💼 Action: **Buy {lot} Lot**")
+                            t1, t2 = st.tabs(["🎯 Plan", "📉 Analysis"])
+                            with t1:
+                                lp = float(row['close'])
+                                sl, tp = int(lp * 0.96), int(lp * 1.12)
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("ENTRY", int(lp))
+                                c2.metric("TARGET", tp)
+                                c3.metric("SL", sl)
+                                
+                                diff = lp - sl
+                                lot = int(((capital * (risk_pct/100)) / diff) / 100) if diff > 0 else 0
+                                st.info(f"💼 Strategi: **Beli {lot} Lot**")
+                                if "Small Cap" in radar_mode:
+                                    st.warning("⚠️ High Volatility: Saham ini lincah, pastikan disiplin SL!")
+                                    
+                            with t2:
+                                df_p = df_hist.tail(40)
+                                fig = go.Figure(data=[go.Candlestick(x=df_p.index, open=df_p['Open'], high=df_p['High'], low=df_p['Low'], close=df_p['Close'])])
+                                fig.update_layout(margin=dict(l=0,r=0,t=0,b=0), height=250, xaxis_rangeslider_visible=False, template="plotly_dark")
+                                st.plotly_chart(fig, use_container_width=True, key=f"c_{row['name']}")
                             
-                        with t2:
-                            df_p = df_hist.tail(45)
-                            fig = go.Figure(data=[go.Candlestick(x=df_p.index, open=df_p['Open'], high=df_p['High'], low=df_p['Low'], close=df_p['Close'])])
-                            fig.add_trace(go.Scatter(x=[df_p.index[0], df_p.index[-1]], y=[poc, poc], line=dict(color="cyan", width=2, dash="dot"), name="POC"))
-                            fig.update_layout(margin=dict(l=0,r=0,t=0,b=0), height=300, xaxis_rangeslider_visible=False, template="plotly_dark")
-                            st.plotly_chart(fig, use_container_width=True, key=f"chart_{row['name']}")
-                            
-                        with t3:
-                            # Perbaikan: Safe display berita agar tidak error 'title'
-                            if not raw_news:
-                                st.write("No news available.")
-                            for n in raw_news[:3]:
-                                n_title = n.get('title', 'No Title Available')
-                                n_pub = n.get('publisher', 'Unknown')
-                                n_link = n.get('link', '#')
-                                st.markdown(f"• **{n_title}** <br><small>{n_pub} | [Read]({n_link})</small>", unsafe_allow_html=True)
-                        
-                        pesan_tele += f"\n💎 <b>{row['name']}</b>\nFlow: {tape_icon} {tape_label} | AI: {ai_icon}\nPlan: {int(last_p)} -> TP {tp}\n"
-                
-                requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
-                status.update(label="Scan Complete!", state="complete", expanded=False)
-            else: st.warning("No matches found.")
-        except Exception as e: st.error(f"System Error: {e}")
+                            pesan_tele += f"\n💎 <b>{row['name']}</b> ({radar_mode.split()[0]})\nFlow: {tape_label}\nPlan: {int(lp)} -> TP {tp}\n"
+                    
+                    requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
+                    status.update(label="Scan Complete!", state="complete", expanded=False)
+                else: st.warning(f"Tidak ada saham {radar_mode} yang menarik saat ini.")
+            else: st.info("Pasar sedang sideways.")
+        except Exception as e: st.error(f"Error: {e}")
