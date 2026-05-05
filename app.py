@@ -6,12 +6,13 @@ import time
 from datetime import datetime
 from tradingview_screener import Query, Column
 
+# Mengabaikan warning pandas
 warnings = pd.options.mode.chained_assignment = None
 
 st.set_page_config(page_title="Ultimate ARA Hunter", layout="centered", page_icon="👑")
 
-st.title("👑 Ultimate ARA Hunter (V8.0)")
-st.caption("TradingView Super-Engine | Techno-Fundamental | Auto-Scan | Anti-Trap")
+st.title("👑 Ultimate ARA Hunter (V8.1)")
+st.caption("Super-Engine | Techno-Fundamental | Probabilitas % | Anti-Trap")
 
 # --- UI PENGATURAN FILTER ---
 with st.expander("⚙️ Buka Pengaturan Filter Lanjutan", expanded=True):
@@ -51,7 +52,6 @@ with col_auto:
 # --- FUNGSI MENGGAMBAR GRAFIK (YFINANCE) ---
 def gambar_grafik(ticker_bersih):
     try:
-        # Tambahkan .JK hanya untuk Yfinance menggambar chart
         saham = yf.Ticker(f"{ticker_bersih}.JK")
         df_chart = saham.history(period="3mo")
         df_chart['MA50'] = df_chart['Close'].rolling(window=50).mean()
@@ -76,9 +76,9 @@ if tombol_manual or mode_auto:
     waktu_sekarang = datetime.now().strftime("%H:%M:%S")
     st.caption(f"Update Terakhir: {waktu_sekarang} WIB")
     
-    with st.spinner("Mengeksekusi TradingView Super-Engine... (1 Detik)"):
+    with st.spinner("Mengeksekusi Super-Engine (1 Detik)..."):
         try:
-            # 1. Menarik SEMUA Data Saham IHSG dengan Filter Awal dari Server TradingView
+            # 1. Menarik Data Saham IHSG
             query = (Query()
                      .set_markets('indonesia')
                      .select('name', 'close', 'change', 'volume', 'average_volume_10d_calc', 
@@ -86,95 +86,71 @@ if tombol_manual or mode_auto:
                              'open', 'high', 'low', 'market_cap_basic',
                              'price_book_ratio', 'return_on_equity')
                      .where(
-                         Column('change') >= min_kenaikan,      # Naik %
-                         Column('close') > Column('SMA50')      # Uptrend MA50
+                         Column('change') >= min_kenaikan,
+                         Column('close') > Column('SMA50')
                      ))
             
             _, df = query.get_scanner_data()
             
             if not df.empty:
-                # 2. Pemrosesan Data di Pandas (Lebih Canggih)
-                # Filter Market Cap
+                # 2. Filter Fundamental & Volume
                 df = df[df['market_cap_basic'] >= min_mc_angka]
                 
-                # Filter Fundamental (PBV & ROE)
                 if pakai_fundo:
                     df = df[(df['price_book_ratio'] <= max_pbv) & (df['return_on_equity'] >= min_roe)]
                 
-                # Filter Rasio Volume Lonjakan (Volume Hari Ini > x kali Rata-rata 10 Hari)
                 df['vol_ratio'] = df['volume'] / df['average_volume_10d_calc'].replace(0, 1)
                 df = df[df['vol_ratio'] >= min_vol_ratio]
                 
-                # 3. ALGORITMA DETEKSI JEBAKAN (ANTI-TRAP)
+                # 3. Algoritma Anti-Trap (Jebakan Bandar)
                 df['body'] = abs(df['close'] - df['open']).replace(0, 0.01)
                 df['upper_shadow'] = df['high'] - df[['open', 'close']].max(axis=1)
                 df['is_trap'] = df['upper_shadow'] > (2 * df['body'])
                 
-                # 4. ALGORITMA "PROBABILITAS" ARA / BULLISH POWER (Skor 1-99%)
+                # 4. Algoritma Probabilitas / Bullish Power
                 def hitung_probabilitas(row):
-                    skor = 20 # Poin awal (karena sudah lolos filter MA50)
-                    
-                    # Faktor 1: Ledakan Volume (Maksimal +30 Poin)
+                    skor = 20 
                     skor += min(row['vol_ratio'] * 10, 30)
-                    
-                    # Faktor 2: Kekuatan Kenaikan Harga (Maksimal +25 Poin)
                     skor += min(row['change'] * 2.5, 25)
-                    
-                    # Faktor 3: Momentum RSI (Maksimal +15 Poin)
-                    # RSI 50-70 adalah momentum ideal. Di atas 70 mulai rawan guyuran.
                     if 50 <= row['RSI'] <= 70: 
                         skor += 15
                     elif 70 < row['RSI'] <= 85: 
                         skor += 5
                         
-                    # Faktor 4: Hukuman Ekor Atas / Jebakan Bandar
                     if row['is_trap']: 
-                        skor -= 45 # Penalti fatal jika terdeteksi jebakan pucuk
+                        skor -= 45 
                     else: 
-                        skor += 10 # Bonus jika body candlestick solid
-                        
-                    # Dibatasi maksimal 99% (karena 100% pasti itu mustahil di pasar saham)
+                        skor += 10 
                     return max(1, min(int(skor), 99))
                 
                 df['prob_ara'] = df.apply(hitung_probabilitas, axis=1)
                 
-                # --- ALGORITMA SORTING: DIURUTKAN BERDASARKAN PROBABILITAS TERTINGGI ---
+                # Sorting dari Probabilitas Tertinggi ke Terendah
                 df = df.sort_values(by='prob_ara', ascending=False).reset_index(drop=True)
                 
                 # --- MENAMPILKAN HASIL ---
                 if not df.empty:
-                    st.success(f"🔥 BINGO! Ditemukan {len(df)} Saham Jawara (Diurutkan dari Terbaik)!")
+                    st.success(f"🔥 BINGO! Ditemukan {len(df)} Saham Jawara (Diurutkan dari Probabilitas Tertinggi)!")
                     
                     for index, row in df.iterrows():
                         with st.container():
                             saham = row['name']
                             naik = round(row['change'], 2)
                             
-                            # Menambahkan Medali/Ranking agar terlihat jelas urutannya
+                            # Ranking & Medali
                             ranking = index + 1
                             medali = "🏆" if ranking == 1 else ("🥈" if ranking == 2 else ("🥉" if ranking == 3 else "📌"))
                             
                             st.markdown(f"### {medali} Rank #{ranking}: **{saham}** 📈 +{naik}%")
-
-prob = row['prob_ara']
                             
-                            # Menampilkan Progress Bar Interaktif untuk Probabilitas
+                            # Bar Probabilitas
+                            prob = row['prob_ara']
                             if prob >= 80:
                                 st.progress(prob / 100, text=f"🔥 Sangat Kuat: Peluang Momentum Bullish {prob}%")
                             elif prob >= 50:
                                 st.progress(prob / 100, text=f"⚡ Moderat: Peluang Momentum Bullish {prob}%")
                             else:
                                 st.progress(prob / 100, text=f"⚠️ Rawan / Lemah: Peluang Momentum Bullish {prob}%")
-                
-                # --- MENAMPILKAN HASIL ---
-                if not df.empty:
-                    st.success(f"🔥 BINGO! Ditemukan {len(df)} Saham Jawara!")
-                    
-                    for index, row in df.iterrows():
-                        with st.container():
-                            saham = row['name']
-                            naik = round(row['change'], 2)
-                            st.markdown(f"### **{saham}** 📈 +{naik}%")
                             
                             # Status Bandar Anti-Trap
                             if row['is_trap']:
@@ -182,7 +158,7 @@ prob = row['prob_ara']
                             else:
                                 st.success("✅ TARIKAN SOLID (Breakout MA50 Kuat)")
                                 
-                            # Tampilan Data Fundamental
+                            # Data Panel Fundamental
                             st.write("**Fundamental & Valuasi:**")
                             mc_t = row['market_cap_basic'] / 1e12
                             c_f1, c_f2, c_f3 = st.columns(3)
@@ -190,7 +166,7 @@ prob = row['prob_ara']
                             c_f2.metric("PBV", f"{round(row['price_book_ratio'], 2)}x" if pd.notna(row['price_book_ratio']) else "N/A")
                             c_f3.metric("ROE", f"{round(row['return_on_equity'], 2)}%" if pd.notna(row['return_on_equity']) else "N/A")
                             
-                            # Tampilan Data Teknikal
+                            # Data Panel Teknikal
                             st.write("**Teknikal & Momentum:**")
                             c_t1, c_t2, c_t3 = st.columns(3)
                             c_t1.metric("Harga", f"Rp {int(row['close']):,}")
@@ -198,7 +174,7 @@ prob = row['prob_ara']
                             warna_rsi = "🔴" if row['RSI'] > 70 else "🟢"
                             c_t3.metric(f"RSI {warna_rsi}", round(row['RSI'], 1))
                             
-                            # Tampilkan Grafik dengan yfinance (Hanya dijalankan jika user mengeklik expander)
+                            # Grafik
                             with st.expander("Lihat Grafik Candlestick vs MA50"):
                                 gambar_grafik(saham)
                             
@@ -209,7 +185,7 @@ prob = row['prob_ara']
                 st.warning("Tidak ada saham yang memenuhi kriteria di pasar saat ini.")
                 
         except Exception as e:
-            st.error(f"Terjadi kesalahan saat menghubungi server TradingView: {e}")
+            st.error(f"Terjadi kesalahan: {e}")
 
     # --- LOGIKA AUTO-SCAN 15 MENIT ---
     if mode_auto:
