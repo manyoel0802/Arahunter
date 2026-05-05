@@ -7,10 +7,31 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-st.set_page_config(page_title="ARA Hunter", layout="centered", page_icon="📱")
+st.set_page_config(page_title="ARA Hunter V3", layout="centered", page_icon="🔥")
 
-st.title("📱 ARA Hunter Mobile")
-st.caption("Pantau potensi saham meroket langsung dari genggaman Anda.")
+st.title("🔥 ARA Hunter V3 (Auto-Data)")
+st.caption("Pantau potensi ARA dari 150+ Saham Paling Aktif di IHSG dengan satu klik.")
+
+# --- DATABASE SAHAM OTOMATIS (150+ Saham Liquid & Aktif IHSG) ---
+DATABASE_SAHAM = """
+BBCA,BBRI,BMRI,BBNI,BRIS,NISP,PNLF,ARTO,BBYB,BBTN,BDMN,
+GOTO,BUKA,EMTK,WIFI,ISAT,EXCL,TLKM,TOWR,TBIG,
+BREN,AMMN,CUAN,BRPT,PGEO,ADRO,PTBA,ITMG,HRUM,MEDC,ENRG,ELSA,AKRA,INDY,DOID,BUMI,DEWA,BRMS,
+INCO,ANTM,MDKA,MBMA,NCKL,TINS,
+ASII,UNTR,AUTO,SMSM,
+ICBP,INDF,MYOR,AMRT,MIDI,CPIN,JPFA,CMRY,CLEO,
+KLBF,SIDO,SILO,MIKA,HEAL,
+PANI,BSDE,CTRA,SMRA,PWON,ASRI,BSBK,
+WIKA,PTPP,ADHI,WEGE,PSSI,JSMR,CMNP,
+INKP,TKIM,TPIA,ESSA,SMGR,INTP,
+FILM,RAAM,CNMA,MSIN,MNCN,SCMA,
+VKTR,GEMS,BSSR,SSIA,SMMT,TPMA,HAIS,SMDR,TMAS,CARS,
+OASA,KEEN,ARKO,CGAS,MUTU,
+DATA,CHIP,HALO,AWAN,
+CGAT,STRK,INET,AEGS,MSKY,SAGE,GTRA,DOOH,CRSN,KAYU,JARR,
+GULA,TGUK,SOUL,TRON,OMED,KAEF,PEHA,IRRA,
+PENG,NELY,MAPI,MAPA,ACES,ERA,ERAA
+"""
 
 # --- FUNGSI TEKNIKAL ---
 def hitung_indikator(df):
@@ -29,7 +50,7 @@ def cek_saham(ticker, min_kenaikan, min_vol):
     try:
         t = f"{ticker}.JK" if not ticker.endswith('.JK') else ticker
         saham = yf.Ticker(t)
-        df = saham.history(period="3mo")
+        df = saham.history(period="2mo") # Dipersingkat jadi 2 bulan agar download lebih cepat
         if len(df) < 30: return None
         
         df = hitung_indikator(df)
@@ -43,7 +64,7 @@ def cek_saham(ticker, min_kenaikan, min_vol):
             return {
                 "Saham": ticker.replace('.JK', ''),
                 "Harga": f"Rp{int(hari_ini['Close']):,}",
-                "Naik": f"{round(kenaikan, 2)}%",
+                "Naik (%)": round(kenaikan, 2),
                 "Vol(x)": round(vol_ratio, 1),
                 "MACD": "Bullish" if hari_ini['MACD'] > hari_ini['Signal'] else "Bearish",
                 "Data": df,
@@ -53,58 +74,79 @@ def cek_saham(ticker, min_kenaikan, min_vol):
     except:
         return None
 
-# --- PENGATURAN DI LAYAR HP ---
-with st.expander("⚙️ Buka Pengaturan Radar"):
-    saham_default = "BBCA, GOTO, BREN, AMMN, CUAN, BRPT, PGO, TLKM, ASII, BMRI"
-    input_teks = st.text_area("Kode Saham (koma):", saham_default)
+# --- UI APLIKASI ---
+# Opsi Pemilihan Data
+pilihan_mode = st.radio("Pilih Mode Pemindaian:", ["Otomatis (Top 150+ Saham Aktif)", "Manual (Ketik Sendiri)"], horizontal=True)
+
+if pilihan_mode == "Otomatis (Top 150+ Saham Aktif)":
+    list_saham = [s.strip().upper() for s in DATABASE_SAHAM.replace("\n", "").split(",")]
+    st.info(f"Database aktif: **{len(list_saham)} Saham** siap dipindai.")
+else:
+    input_teks = st.text_area("Ketik Kode Saham (pisahkan koma):", "BBCA, GOTO, BREN, AMMN")
     list_saham = [s.strip().upper() for s in input_teks.split(",")]
-    
+
+# Pengaturan Filter
+with st.expander("⚙️ Atur Filter Ketat (Opsional)"):
     col1, col2 = st.columns(2)
     with col1:
         min_kenaikan = st.number_input("Min Naik (%)", value=3)
     with col2:
-        min_volume = st.number_input("Min Vol (x)", value=1.5)
+        min_volume = st.number_input("Min Vol (x lipat)", value=1.5)
 
-# --- EKSEKUSI ---
-if st.button("🚀 SCAN SEKARANG", use_container_width=True, type="primary"):
-    if not list_saham:
-        st.error("Isi kode saham dulu!")
+# --- EKSEKUSI UTAMA ---
+if st.button("🚀 SCAN PASAR SEKARANG", use_container_width=True, type="primary"):
+    if not list_saham or list_saham == ['']:
+        st.error("Daftar saham tidak boleh kosong!")
     else:
         hasil = []
         bar = st.progress(0)
+        teks_status = st.empty()
         
-        with st.spinner('Menganalisis pasar...'):
-            with ThreadPoolExecutor(max_workers=10) as executor:
+        with st.spinner(f'Menganalisis {len(list_saham)} saham... Jangan tutup layar.'):
+            # Menggunakan 15 pekerja agar lebih cepat
+            with ThreadPoolExecutor(max_workers=15) as executor:
                 futures = {executor.submit(cek_saham, t, min_kenaikan, min_volume): t for t in list_saham}
                 for i, f in enumerate(as_completed(futures)):
                     res = f.result()
                     if res: hasil.append(res)
                     bar.progress((i + 1) / len(list_saham))
+                    teks_status.text(f"Mengecek saham ke-{i+1}...")
         
         bar.empty()
+        teks_status.empty()
         
         if hasil:
-            hasil = sorted(hasil, key=lambda x: float(x['Naik'].replace('%','')), reverse=True)
-            st.success(f"🔥 {len(hasil)} Saham Ditemukan!")
+            hasil = sorted(hasil, key=lambda x: x['Naik (%)'], reverse=True)
+            st.success(f"🔥 BINGO! {len(hasil)} Saham Masuk Radar")
             
-            # Tampilan kartu (Card) yang lebih enak dibaca di HP daripada tabel panjang
             for item in hasil:
                 with st.container():
-                    st.markdown(f"### {item['Saham']} 📈 {item['Naik']}")
+                    # Menampilkan header saham dengan persentase kenaikan
+                    st.markdown(f"### **{item['Saham']}** 📈 +{item['Naik (%)']}%")
+                    
+                    # Layout metrik yang rapi untuk layar HP
                     c1, c2, c3 = st.columns(3)
                     c1.metric("Harga", item['Harga'])
-                    c2.metric("Volume", f"{item['Vol(x)']}x")
-                    c3.metric("RSI", item['RSI'])
+                    c2.metric("Vol Lonjak", f"{item['Vol(x)']}x")
                     
-                    with st.expander("Lihat Grafik"):
+                    # Warna RSI (Overbought/Normal)
+                    warna_rsi = "🔴" if item['RSI'] > 70 else "🟢"
+                    c3.metric(f"RSI {warna_rsi}", item['RSI'])
+                    
+                    with st.expander(f"Lihat Grafik & Detail MACD: {item['MACD']}"):
                         df_chart = item['Data']
                         fig = go.Figure(data=[go.Candlestick(
-                            x=df_chart.index[-30:], 
+                            x=df_chart.index[-30:], # Menampilkan 1 bulan terakhir agar jelas di HP
                             open=df_chart['Open'][-30:], high=df_chart['High'][-30:],
                             low=df_chart['Low'][-30:], close=df_chart['Close'][-30:]
                         )])
-                        fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=300, xaxis_rangeslider_visible=False)
+                        fig.update_layout(
+                            margin=dict(l=0, r=0, t=0, b=0), 
+                            height=250, 
+                            xaxis_rangeslider_visible=False,
+                            template="plotly_dark"
+                        )
                         st.plotly_chart(fig, use_container_width=True)
                     st.divider()
         else:
-            st.warning("Tidak ada saham yang masuk radar saat ini.")
+            st.warning("Pasar sedang lesu atau filter terlalu ketat. Tidak ada saham yang masuk radar hari ini.")
