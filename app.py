@@ -106,20 +106,40 @@ if tombol_manual or mode_auto:
                 df = df[df['vol_ratio'] >= min_vol_ratio]
                 
                 # 3. ALGORITMA DETEKSI JEBAKAN (ANTI-TRAP)
-                # Menghitung panjang ekor atas vs badan candle
                 df['body'] = abs(df['close'] - df['open']).replace(0, 0.01)
                 df['upper_shadow'] = df['high'] - df[['open', 'close']].max(axis=1)
                 df['is_trap'] = df['upper_shadow'] > (2 * df['body'])
                 
-                # Urutkan berdasarkan kenaikan tertinggi
-                # --- ALGORITMA SORTING: TERBAIK KE TERJELEK ---
-                # Menggunakan Multi-Level Sorting Pandas
-                # True = Diurutkan dari bawah ke atas (False dulu baru True, artinya Aman dulu baru Trap)
-                # False = Diurutkan dari besar ke kecil (Angka terbesar di atas)
-                df = df.sort_values(
-                    by=['is_trap', 'change', 'vol_ratio'], 
-                    ascending=[True, False, False]
-                ).reset_index(drop=True)
+                # 4. ALGORITMA "PROBABILITAS" ARA / BULLISH POWER (Skor 1-99%)
+                def hitung_probabilitas(row):
+                    skor = 20 # Poin awal (karena sudah lolos filter MA50)
+                    
+                    # Faktor 1: Ledakan Volume (Maksimal +30 Poin)
+                    skor += min(row['vol_ratio'] * 10, 30)
+                    
+                    # Faktor 2: Kekuatan Kenaikan Harga (Maksimal +25 Poin)
+                    skor += min(row['change'] * 2.5, 25)
+                    
+                    # Faktor 3: Momentum RSI (Maksimal +15 Poin)
+                    # RSI 50-70 adalah momentum ideal. Di atas 70 mulai rawan guyuran.
+                    if 50 <= row['RSI'] <= 70: 
+                        skor += 15
+                    elif 70 < row['RSI'] <= 85: 
+                        skor += 5
+                        
+                    # Faktor 4: Hukuman Ekor Atas / Jebakan Bandar
+                    if row['is_trap']: 
+                        skor -= 45 # Penalti fatal jika terdeteksi jebakan pucuk
+                    else: 
+                        skor += 10 # Bonus jika body candlestick solid
+                        
+                    # Dibatasi maksimal 99% (karena 100% pasti itu mustahil di pasar saham)
+                    return max(1, min(int(skor), 99))
+                
+                df['prob_ara'] = df.apply(hitung_probabilitas, axis=1)
+                
+                # --- ALGORITMA SORTING: DIURUTKAN BERDASARKAN PROBABILITAS TERTINGGI ---
+                df = df.sort_values(by='prob_ara', ascending=False).reset_index(drop=True)
                 
                 # --- MENAMPILKAN HASIL ---
                 if not df.empty:
@@ -135,6 +155,16 @@ if tombol_manual or mode_auto:
                             medali = "🏆" if ranking == 1 else ("🥈" if ranking == 2 else ("🥉" if ranking == 3 else "📌"))
                             
                             st.markdown(f"### {medali} Rank #{ranking}: **{saham}** 📈 +{naik}%")
+
+prob = row['prob_ara']
+                            
+                            # Menampilkan Progress Bar Interaktif untuk Probabilitas
+                            if prob >= 80:
+                                st.progress(prob / 100, text=f"🔥 Sangat Kuat: Peluang Momentum Bullish {prob}%")
+                            elif prob >= 50:
+                                st.progress(prob / 100, text=f"⚡ Moderat: Peluang Momentum Bullish {prob}%")
+                            else:
+                                st.progress(prob / 100, text=f"⚠️ Rawan / Lemah: Peluang Momentum Bullish {prob}%")
                 
                 # --- MENAMPILKAN HASIL ---
                 if not df.empty:
