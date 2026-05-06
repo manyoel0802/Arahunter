@@ -13,7 +13,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V25.0", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="GOD MODE V25.1", layout="wide", page_icon="🤖")
 
 # --- SECURITY ---
 try:
@@ -70,7 +70,7 @@ def calculate_atr(df, period=14):
         return tr.rolling(period).mean().iloc[-1]
     except: return 0.0
 
-# --- LIVE TRAILING STOP TRACKER (Updated with Tele Toggle) ---
+# --- LIVE TRAILING STOP TRACKER ---
 def update_trailing_stops(atr_mult, send_tele_active):
     if st.session_state['history_log'].empty: return
     
@@ -84,16 +84,21 @@ def update_trailing_stops(atr_mult, send_tele_active):
                 cp = float(hist['Close'].iloc[-1])
                 atr = calculate_atr(hist)
                 
-                current_hwm = max(row['High_Water_Mark'], cp)
+                # Konversi paksa ke float agar aman dari TypeError
+                old_hwm = float(row['High_Water_Mark'])
+                old_sl = float(row['Trailing_SL'])
+                entry_price = float(row['Entry'])
+                
+                current_hwm = max(old_hwm, cp)
                 st.session_state['history_log'].at[index, 'Current_Price'] = cp
                 st.session_state['history_log'].at[index, 'High_Water_Mark'] = current_hwm
                 
                 new_trailing_sl = current_hwm - (atr * atr_mult)
-                final_sl = max(row['Trailing_SL'], new_trailing_sl)
-                st.session_state['history_log'].at[index, 'Trailing_SL'] = int(final_sl)
+                final_sl = max(old_sl, new_trailing_sl)
+                st.session_state['history_log'].at[index, 'Trailing_SL'] = final_sl
                 
                 if cp <= final_sl:
-                    profit_pct = ((cp - row['Entry']) / row['Entry']) * 100
+                    profit_pct = ((cp - entry_price) / entry_price) * 100
                     icon = "🟢" if profit_pct > 0 else "🔴"
                     msg = f"🛡️ <b>TRAILING STOP HIT!</b>\n\nStock: <b>{row['Ticker']}</b>\nExit Price: {int(cp)}\nResult: {icon} <b>{round(profit_pct, 2)}%</b>"
                     
@@ -109,7 +114,7 @@ ihsg_safe = ihsg_df['Close'].iloc[-1] > ihsg_df['Close'].rolling(20).mean().iloc
 
 st.markdown(f"""
     <div class='status-card bg-auto'>
-        <h1 style='margin:0; color:#60a5fa;'>🤖 GOD MODE V25.0: AUTO-PILOT</h1>
+        <h1 style='margin:0; color:#60a5fa;'>🤖 GOD MODE V25.1: AUTO-PILOT</h1>
         <p style='margin:0; opacity:0.8; color:#e2e8f0;'>Last Scan: {st.session_state['last_scan']} | IHSG: {'BULLISH' if ihsg_safe else 'BEARISH'}</p>
     </div>
     """, unsafe_allow_html=True)
@@ -117,11 +122,8 @@ st.markdown(f"""
 # --- SIDEBAR & AUTOMATION TOGGLES ---
 with st.sidebar:
     st.header("🎛️ Automation Control")
-    # Toggle Telegram
-    send_telegram = st.toggle("📲 Telegram Alerts", value=True, help="Matikan jika tidak ingin dikirim pesan ke Telegram.")
-    
-    # Toggle Auto-Pilot
-    auto_pilot = st.toggle("🤖 Auto-Pilot Mode", value=False, help="Radar akan otomatis berjalan terus menerus.")
+    send_telegram = st.toggle("📲 Telegram Alerts", value=True)
+    auto_pilot = st.toggle("🤖 Auto-Pilot Mode", value=False)
     refresh_rate = st.slider("Interval Auto-Scan (Menit)", 1, 15, 5, disabled=not auto_pilot)
     
     st.divider()
@@ -133,18 +135,24 @@ with st.sidebar:
     st.divider()
     st.write("**📡 Live Trailing Tracker:**")
     active_portfolio = st.session_state['history_log'][st.session_state['history_log']['Status'] == 'OPEN']
+    
     if not active_portfolio.empty:
         display_df = active_portfolio[['Ticker', 'Current_Price', 'Trailing_SL']].copy()
+        
+        # --- PERBAIKAN: Memaksa konversi ke format numerik (Float) sebelum kalkulasi ---
+        display_df['Current_Price'] = pd.to_numeric(display_df['Current_Price'], errors='coerce')
+        display_df['Trailing_SL'] = pd.to_numeric(display_df['Trailing_SL'], errors='coerce')
+        
         display_df['Jarak SL'] = ((display_df['Current_Price'] - display_df['Trailing_SL']) / display_df['Current_Price'] * 100).round(1).astype(str) + '%'
         st.dataframe(display_df, use_container_width=True, hide_index=True)
-    else: st.info("Portofolio kosong.")
+    else: 
+        st.info("Portofolio kosong.")
         
     if st.button("🧹 Clear Portfolio"):
         st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Entry', 'Current_Price', 'High_Water_Mark', 'Trailing_SL', 'Status'])
         st.rerun()
 
 # --- EXECUTION ENGINE ---
-# Scan akan berjalan jika tombol ditekan, ATAU jika auto_pilot menyala
 if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") or auto_pilot:
     with st.status("Engine Running...", expanded=True) as status:
         try:
@@ -159,7 +167,7 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
                 df_scan = df_raw[(df_raw['market_cap_basic'] >= 1e11) & (df_raw['v_ratio'] >= 1.5)]
                 df_scan = df_scan.sort_values('change', ascending=False).head(8).reset_index(drop=True)
                 
-                pesan_tele = f"🤖 <b>V25.0 AUTO-PILOT REPORT</b>\nSensitivity: {ts_sensitivity}x ATR\n"
+                pesan_tele = f"🤖 <b>V25.1 AUTO-PILOT REPORT</b>\nSensitivity: {ts_sensitivity}x ATR\n"
                 valid_stocks = 0
                 
                 for idx, row in df_scan.iterrows():
@@ -176,11 +184,12 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
                         atr = calculate_atr(df_hist)
                         
                         lp = float(row['close'])
-                        sl_price = int(lp - (atr * ts_sensitivity)) 
+                        sl_price = float(lp - (atr * ts_sensitivity)) 
                         sl_pct = round(((lp - sl_price) / lp) * 100, 1)
                         
                         if t_sym not in st.session_state['history_log']['Ticker'].values:
-                            new_p = pd.DataFrame([[datetime.now().strftime('%H:%M'), t_sym, int(lp), int(lp), int(lp), sl_price, 'OPEN']], 
+                            # Memastikan semua masuk sebagai angka Float/Integer
+                            new_p = pd.DataFrame([[datetime.now().strftime('%H:%M'), t_sym, lp, lp, lp, sl_price, 'OPEN']], 
                                                 columns=['Waktu', 'Ticker', 'Entry', 'Current_Price', 'High_Water_Mark', 'Trailing_SL', 'Status'])
                             st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_p], ignore_index=True)
                         
@@ -198,14 +207,14 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
                         
                         c1, c2, c3 = st.columns(3)
                         c1.metric("ENTRY", int(lp))
-                        c2.metric("TRAILING STOP", sl_price, f"-{sl_pct}%")
+                        c2.metric("TRAILING STOP", int(sl_price), f"-{sl_pct}%")
                         
                         risk_rp = lp - sl_price
                         lot = int(((capital * (risk_pct/100)) / risk_rp) / 100) if risk_rp > 0 else 0
                         if not ihsg_safe: lot = int(lot/2)
                         c3.metric("REC. LOT", lot)
                         
-                        pesan_tele += f"\n💎 <b>{t_sym}</b>\nEntry: Rp {int(lp)}\nTrailing SL: Rp {sl_price} (-{sl_pct}%)\nLot: {lot} Lot\n"
+                        pesan_tele += f"\n💎 <b>{t_sym}</b>\nEntry: Rp {int(lp)}\nTrailing SL: Rp {int(sl_price)} (-{sl_pct}%)\nLot: {lot} Lot\n"
 
                 if valid_stocks > 0 and send_telegram:
                     requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
@@ -217,7 +226,6 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
         except Exception as e: st.error(f"System Error: {e}")
 
 # --- AUTO-PILOT LOOP MECHANISM ---
-# Jika Auto-Pilot dinyalakan, program akan 'tertidur' sesuai interval, lalu me-refresh halaman otomatis.
 if auto_pilot:
     st.sidebar.success(f"🤖 Auto-Pilot Aktif. Memantau market setiap {refresh_rate} menit...")
     time.sleep(refresh_rate * 60)
