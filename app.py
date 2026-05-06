@@ -140,15 +140,14 @@ def update_trailing_stops(base_atr_mult, is_flash_crash, send_tele_active):
 # --- UI HEADER ---
 ihsg_safe, sp500_safe, is_flash_crash, ihsg_df = get_macro_data()
 
+flash_msg = "<br><span class='badge-alert'>⚠️ FLASH CRASH DETECTED: Trailing Stop Diperketat!</span>" if is_flash_crash else ""
+
 st.markdown(f"""
-    <div class='status-card bg-singularity'>
-        <h1 style='margin:0; color:#c084fc;'>🌌 GOD MODE V29.0: THE SINGULARITY</h1>
-        <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>
-            🇮🇩 IHSG: <b>{'BULLISH' if ihsg_safe else 'BEARISH'}</b> | 🇺🇸 S&P 500: <b>{'BULLISH' if sp500_safe else 'BEARISH'}</b>
-            { "<br><span class='badge-alert'>⚠️ FLASH CRASH DETECTED: Trailing Stop Diperketat!</span>" if is_flash_crash else "" }
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+<div class='status-card bg-singularity'>
+<h1 style='margin:0; color:#c084fc;'>🌌 GOD MODE V29.0: THE SINGULARITY</h1>
+<p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>🇮🇩 IHSG: <b>{'BULLISH' if ihsg_safe else 'BEARISH'}</b> | 🇺🇸 S&P 500: <b>{'BULLISH' if sp500_safe else 'BEARISH'}</b>{flash_msg}</p>
+</div>
+""", unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
