@@ -12,7 +12,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V32.1", layout="wide", page_icon="🌪️")
+st.set_page_config(page_title="GOD MODE V33.0", layout="wide", page_icon="🎯")
 
 # --- SECURITY & DATABASE ---
 try:
@@ -35,13 +35,12 @@ st.markdown("""
     .main { background-color: #0d1117; }
     .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
     .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #30363d; color: white; }
-    .bg-nexus { background: linear-gradient(135deg, #020617 0%, #064e3b 50%, #0ea5e9 100%); border-top: 5px solid #10b981; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4); }
-    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 5px solid #10b981; }
-    .badge-pro { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; }
+    .bg-nexus { background: linear-gradient(135deg, #020617 0%, #0f766e 50%, #0369a1 100%); border-top: 5px solid #06b6d4; box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4); }
+    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 5px solid #06b6d4; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 🌪️ ENGINES & ALGORITHMS ---
+# --- 🎯 ENGINES & ALGORITHMS ---
 def analyze_sector_flow(df_raw):
     try:
         df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0, 1)
@@ -133,18 +132,18 @@ flash_msg = "<br><span style='background:#ef4444; color:white; padding:2px 8px; 
 
 st.markdown(f"""
 <div class='status-card bg-nexus'>
-    <h1 style='margin:0; color:#10b981;'>🌪️ GOD MODE V32.1: SECTOR NEXUS</h1>
-    <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>Top-Down Approach | Institutional Sector Flow | AI DeepQuant{flash_msg}</p>
+    <h1 style='margin:0; color:#22d3ee;'>🎯 GOD MODE V33.0: PRECISION STRIKE</h1>
+    <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>AI Sector Flow | Minervini Template | Dynamic Entry Zone{flash_msg}</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🎛️ SIDEBAR (DIPERBAIKI) 🎛️ ---
+# --- 🎛️ SIDEBAR ---
 with st.sidebar:
-    st.header("🎛️ Flow Control")
+    st.header("🎛️ Command Center")
     send_telegram = st.toggle("📲 Telegram Alerts", value=True)
     auto_pilot = st.toggle("🤖 Auto-Pilot Mode", value=False)
     refresh_rate = st.slider("Interval (Menit)", 1, 15, 5, disabled=not auto_pilot)
-    strict_sector = st.toggle("🌪️ Strict Sector Mode", value=True, help="Hanya beli saham yang berada di Top 2 Sektor paling panas hari ini.")
+    strict_sector = st.toggle("🌪️ Strict Sector Mode", value=True)
     
     st.divider()
     st.header("⚙️ Capital & Risk")
@@ -152,7 +151,7 @@ with st.sidebar:
     risk_pct = st.slider("Risk Per Trade (%)", 1.0, 5.0, 2.0, step=0.5)
     
     st.divider()
-    st.write("**📡 Quantum Tracker:**")
+    st.write("**📡 Tracker Portfolio:**")
     active_portfolio = st.session_state['history_log'][st.session_state['history_log']['Status'] == 'OPEN']
 
     if not active_portfolio.empty:
@@ -168,8 +167,8 @@ with st.sidebar:
         st.rerun()
 
 # --- EXECUTION ENGINE ---
-if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="primary") or auto_pilot:
-    with st.status("Helicopter View: Mapping Global & Sector Flow...", expanded=True) as status:
+if st.button("🚀 INITIATE PRECISION SCAN", use_container_width=True, type="primary") or auto_pilot:
+    with st.status("Targeting Institutional Signatures...", expanded=True) as status:
         try:
             update_trailing_stops(is_flash_crash, send_telegram)
             
@@ -185,7 +184,7 @@ if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="prim
                 st.dataframe(sector_df[['sector', 'avg_change', 'avg_v_ratio', 'momentum_score']].head(5), use_container_width=True)
                 
                 if top_sectors:
-                    st.success(f"🔥 Uang raksasa sedang mengalir deras ke Sektor: **{top_sectors[0]}** dan **{top_sectors[1]}**")
+                    st.success(f"🔥 Sektor Hot Uang Raksasa: **{top_sectors[0]}** & **{top_sectors[1]}**")
                 
                 df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0,1)
                 
@@ -196,7 +195,7 @@ if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="prim
                 
                 df_scan = df_scan.sort_values('change', ascending=False).head(15).reset_index(drop=True)
                 
-                pesan_tele = f"🌪️ <b>V32.1 SECTOR NEXUS REPORT</b>\n🔥 Hot Sectors: {', '.join(top_sectors[:2])}\n"
+                pesan_tele = f"🎯 <b>V33.0 PRECISION STRIKE REPORT</b>\n🔥 Hot Sectors: {', '.join(top_sectors[:2])}\n"
                 valid_stocks = 0
                 
                 for idx, row in df_scan.iterrows():
@@ -215,6 +214,12 @@ if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="prim
                         is_smart_money = check_smart_money(df_hist)
                         atr = calculate_atr(df_hist)
                         lp = float(row['close'])
+                        
+                        # 🎯 LOGIKA ZONA ENTRY TERBAIK (PRECISION STRIKE)
+                        sma20 = df_hist['Close'].rolling(20).mean().iloc[-1]
+                        pullback_target = lp - (atr * 0.5) 
+                        best_entry = int(max(sma20, pullback_target)) # Mencegah antre terlalu bawah tembus SMA20
+                        
                         sl_price = float(lp - (atr * 2.5)) 
                         sl_pct = round(((lp - sl_price) / lp) * 100, 1)
                         
@@ -234,7 +239,7 @@ if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="prim
                         
                         st.markdown(f"""
                             <div class='stock-card'>
-                                <h2 style='margin:0;'>{t_sym} <span style='color:#10b981; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
+                                <h2 style='margin:0;'>{t_sym} <span style='color:#06b6d4; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
                                 <p style='color:#94a3b8; font-size:14px; margin:0 0 10px 0;'>🏭 Sector: <b>{t_sector}</b></p>
                                 <p style='margin:0 0 5px 0;'>
                                     <span style='background:#10b981; color:white; padding:3px 8px; border-radius:4px; font-weight:bold;'>🧠 AI: {ai_score}%</span>
@@ -245,18 +250,19 @@ if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="prim
                         """, unsafe_allow_html=True)
                         
                         c1, c2, c3 = st.columns(3)
-                        c1.metric("ENTRY", int(lp))
-                        c2.metric("TRAILING STOP", int(sl_price), f"-{sl_pct}%")
-                        c3.metric("REC. LOT", lot)
+                        # TAMPILAN ZONA BELI BARU
+                        c1.metric("🎯 ZONA BELI TERBAIK", f"Rp {best_entry} - {int(lp)}")
+                        c2.metric("🛡️ TRAILING STOP", int(sl_price), f"-{sl_pct}%")
+                        c3.metric("📦 REC. LOT", lot)
                         
-                        pesan_tele += f"\n💎 <b>{t_sym}</b> ({t_sector})\n🧠 AI: {ai_score}% | 🐋 OBV: {'Akumulasi' if is_smart_money else 'Distribusi'}\nEntry: Rp {int(lp)}\nLot: {lot} Lot\n"
+                        pesan_tele += f"\n💎 <b>{t_sym}</b> ({t_sector})\n🎯 Buy Zone: Rp {best_entry} - Rp {int(lp)}\n🛡️ Trailing SL: Rp {int(sl_price)}\n📦 Lot: {lot} Lot\n"
 
                 if valid_stocks > 0 and send_telegram:
                     requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
                 
                 st.session_state['last_scan'] = datetime.now().strftime('%H:%M:%S')
-                status.update(label=f"Top-Down Analysis Complete at {st.session_state['last_scan']}!", state="complete", expanded=False)
-                if valid_stocks == 0: st.warning("Meskipun ada sektor yang panas, tidak ada saham yang lolos filter AI dan Minervini di sektor tersebut hari ini.")
+                status.update(label=f"Precision Scan Complete at {st.session_state['last_scan']}!", state="complete", expanded=False)
+                if valid_stocks == 0: st.warning("Mesin tidak menemukan Setup Sempurna (Perfect Setup) saat ini. Simpan peluru Anda.")
             else: st.info("Gagal menarik data pasar.")
         except Exception as e: st.error(f"Engine Error: {e}")
 
