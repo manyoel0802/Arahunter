@@ -13,9 +13,9 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V29.0", layout="wide", page_icon="🌌")
+st.set_page_config(page_title="GOD MODE V30.0", layout="wide", page_icon="🔱")
 
-# --- SECURITY ---
+# --- SECURITY & DATABASE ---
 try:
     TELE_TOKEN = st.secrets["TELE_TOKEN"]
     TELE_CHAT_ID = st.secrets["TELE_CHAT_ID"]
@@ -23,7 +23,6 @@ except:
     TELE_TOKEN = "8457858315:AAGPSHq0UsfPv8MZ733tHs40gAOxwvx7G0o"
     TELE_CHAT_ID = "5916986433"
 
-# --- DATABASE ---
 if 'history_log' not in st.session_state:
     st.session_state['history_log'] = pd.DataFrame(columns=[
         'Waktu', 'Ticker', 'Entry', 'Current_Price', 'High_Water_Mark', 'Trailing_SL', 'Status'
@@ -37,30 +36,60 @@ st.markdown("""
     .main { background-color: #0d1117; }
     .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
     .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #30363d; color: white; }
-    .bg-singularity { background: linear-gradient(135deg, #000000 0%, #1e1b4b 50%, #4c1d95 100%); border-top: 5px solid #a855f7; box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4); }
-    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 4px solid #06b6d4; }
+    .bg-frontier { background: linear-gradient(135deg, #111827 0%, #4c1d95 50%, #f43f5e 100%); border-top: 5px solid #fbbf24; box-shadow: 0 4px 20px rgba(244, 63, 94, 0.4); }
+    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 5px solid #f43f5e; }
     .badge-pro { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; }
     .badge-alert { padding: 4px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; background: #ef4444; color: white; animation: pulse 2s infinite; }
     @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 🌍 GLOBAL MACRO & AI ENGINES ---
+# --- 🔱 INSTITUTIONAL APEX ENGINES ---
 @st.cache_data(ttl=300)
 def get_macro_data():
     try:
         ihsg = yf.Ticker("^JKSE").history(period="1mo")
         sp500 = yf.Ticker("^GSPC").history(period="1mo")
-        
         ihsg_safe = ihsg['Close'].iloc[-1] > ihsg['Close'].rolling(20).mean().iloc[-1]
         sp500_safe = sp500['Close'].iloc[-1] > sp500['Close'].rolling(20).mean().iloc[-1]
-        
-        # Deteksi Flash Crash (Drop > 1.2% dalam sehari)
-        ihsg_daily_change = (ihsg['Close'].iloc[-1] - ihsg['Close'].iloc[-2]) / ihsg['Close'].iloc[-2]
-        is_flash_crash = ihsg_daily_change <= -0.012
-        
+        is_flash_crash = ((ihsg['Close'].iloc[-1] - ihsg['Close'].iloc[-2]) / ihsg['Close'].iloc[-2]) <= -0.012
         return ihsg_safe, sp500_safe, is_flash_crash, ihsg
     except: return True, True, False, pd.DataFrame()
+
+# 1. OBV Smart Money Flow
+def check_smart_money(df):
+    try:
+        obv = (np.sign(df['Close'].diff()) * df['Volume']).fillna(0).cumsum()
+        obv_sma20 = obv.rolling(20).mean()
+        is_accumulating = obv.iloc[-1] > obv_sma20.iloc[-1]
+        return is_accumulating
+    except: return False
+
+# 2. Volume Profile (Point of Control)
+def calculate_poc(df, days=120):
+    try:
+        recent = df.tail(days).copy()
+        recent['bins'] = pd.cut(recent['Close'], bins=20)
+        poc_bin = recent.groupby('bins')['Volume'].sum().idxmax()
+        poc_price = poc_bin.mid
+        return int(poc_price), (df['Close'].iloc[-1] > poc_price)
+    except: return 0, False
+
+# 3. 5-Year Seasonality
+def calculate_seasonality(ticker):
+    try:
+        hist = yf.Ticker(f"{ticker}.JK").history(period="5y", interval="1mo")
+        if hist.empty or len(hist) < 12: return "N/A"
+        
+        current_month = datetime.now().month
+        hist['Month'] = hist.index.month
+        month_data = hist[hist['Month'] == current_month]
+        if month_data.empty: return "N/A"
+        
+        month_data['Ret'] = (month_data['Close'] - month_data['Open']) / month_data['Open']
+        win_rate = (month_data['Ret'] > 0).mean() * 100
+        return f"{int(win_rate)}%"
+    except: return "N/A"
 
 def calculate_rsi(data, periods=14):
     close_delta = data['Close'].diff()
@@ -86,7 +115,7 @@ def deepquant_ai_score(df):
         vcp_score = 100 if bb_width.iloc[-1] < bb_width.rolling(20).mean().iloc[-1] else 40
         final_score = int((rsi_score * 0.5) + (vcp_score * 0.5))
         
-        tag = "🌌 SINGULARITY CONVICTION" if final_score >= 85 else ("🔥 STRONG" if final_score >= 70 else "⚖️ NEUTRAL")
+        tag = "🌌 APEX CONVICTION" if final_score >= 85 else ("🔥 STRONG" if final_score >= 70 else "⚖️ NEUTRAL")
         return final_score, tag
     except: return 50, "⚖️ NEUTRAL"
 
@@ -104,11 +133,8 @@ def calculate_atr(df, period=14):
         return tr.rolling(period).mean().iloc[-1]
     except: return 0.0
 
-# --- SHIELD: LIVE TRAILING STOP TRACKER ---
 def update_trailing_stops(base_atr_mult, is_flash_crash, send_tele_active):
     if st.session_state['history_log'].empty: return
-    
-    # 🛡️ FLASH CRASH PROTOCOL: Ketatkan Stop Loss otomatis jika pasar panik!
     active_atr_mult = 1.5 if is_flash_crash else base_atr_mult
     
     for index, row in st.session_state['history_log'].iterrows():
@@ -132,26 +158,25 @@ def update_trailing_stops(base_atr_mult, is_flash_crash, send_tele_active):
                 if cp <= final_sl:
                     profit_pct = ((cp - entry_price) / entry_price) * 100
                     icon = "🟢" if profit_pct > 0 else "🔴"
-                    msg = f"🛡️ <b>TRAILING STOP HIT!</b>\nStock: <b>{row['Ticker']}</b>\nExit Price: {int(cp)}\nResult: {icon} <b>{round(profit_pct, 2)}%</b>\n{('⚠️ AUTO-TIGHTEN AKTIF (Pasar Panik)' if is_flash_crash else '')}"
+                    msg = f"🛡️ <b>TRAILING STOP HIT!</b>\nStock: <b>{row['Ticker']}</b>\nExit Price: {int(cp)}\nResult: {icon} <b>{round(profit_pct, 2)}%</b>\n{('⚠️ AUTO-TIGHTEN AKTIF' if is_flash_crash else '')}"
                     if send_tele_active: requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": msg, "parse_mode": "HTML"})
                     st.session_state['history_log'].at[index, 'Status'] = 'CLOSED'
             except: continue
 
 # --- UI HEADER ---
 ihsg_safe, sp500_safe, is_flash_crash, ihsg_df = get_macro_data()
-
 flash_msg = "<br><span class='badge-alert'>⚠️ FLASH CRASH DETECTED: Trailing Stop Diperketat!</span>" if is_flash_crash else ""
 
 st.markdown(f"""
-<div class='status-card bg-singularity'>
-<h1 style='margin:0; color:#c084fc;'>🌌 GOD MODE V29.0: THE SINGULARITY</h1>
-<p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>🇮🇩 IHSG: <b>{'BULLISH' if ihsg_safe else 'BEARISH'}</b> | 🇺🇸 S&P 500: <b>{'BULLISH' if sp500_safe else 'BEARISH'}</b>{flash_msg}</p>
-</div>
-""", unsafe_allow_html=True)
+    <div class='status-card bg-frontier'>
+        <h1 style='margin:0; color:#fbbf24;'>🔱 GOD MODE V30.0: THE FINAL FRONTIER</h1>
+        <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>🇮🇩 IHSG: <b>{'BULLISH' if ihsg_safe else 'BEARISH'}</b> | 🇺🇸 S&P 500: <b>{'BULLISH' if sp500_safe else 'BEARISH'}</b>{flash_msg}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("🎛️ Singularity Control")
+    st.header("🎛️ Apex Control")
     send_telegram = st.toggle("📲 Telegram Alerts", value=True)
     auto_pilot = st.toggle("🤖 Auto-Pilot Mode", value=False)
     refresh_rate = st.slider("Interval (Menit)", 1, 15, 5, disabled=not auto_pilot)
@@ -179,15 +204,14 @@ with st.sidebar:
         st.rerun()
 
 # --- EXECUTION ENGINE ---
-if st.button("🚀 INITIATE QUANTUM SCAN", use_container_width=True, type="primary") or auto_pilot:
-    with st.status("Singularity Engine Analyzing Global Markets...", expanded=True) as status:
+if st.button("🚀 INITIATE FRONTIER SCAN", use_container_width=True, type="primary") or auto_pilot:
+    with st.status("Initializing Institutional Quant Algorithms (Please wait...)", expanded=True) as status:
         try:
             update_trailing_stops(ts_sensitivity, is_flash_crash, send_telegram)
             
-            # Jika Wall Street & IHSG hancur bersamaan, robot menolak mencari saham baru.
             if not ihsg_safe and not sp500_safe:
-                st.error("🚨 GLOBAL MARKET CRASH: IHSG dan S&P 500 sedang hancur. Singularity Engine menolak membuka posisi baru untuk melindungi kas Anda.")
-                status.update(label="Scan Dibatalkan (Global Risk).", state="complete")
+                st.error("🚨 GLOBAL MARKET CRASH: Trading dilarang oleh sistem untuk melindungi kas.")
+                status.update(label="Scan Dibatalkan.", state="complete")
             else:
                 q = (Query().set_markets('indonesia').select('name','close','change','volume','average_volume_10d_calc','SMA50','market_cap_basic','open','high','low')
                      .where(Column('change') >= 1.5, Column('close') > Column('SMA50')))
@@ -196,10 +220,11 @@ if st.button("🚀 INITIATE QUANTUM SCAN", use_container_width=True, type="prima
                 if not df_raw.empty:
                     df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0,1)
                     df_scan = df_raw[(df_raw['market_cap_basic'] >= 1e11) & (df_raw['v_ratio'] >= 1.5)]
-                    df_scan = df_scan.sort_values('change', ascending=False).head(10).reset_index(drop=True)
+                    df_scan = df_scan.sort_values('change', ascending=False).head(15).reset_index(drop=True) # Perbesar jaring awal
                     
-                    pesan_tele = f"🌌 <b>V29.0 SINGULARITY REPORT</b>\n"
+                    pesan_tele = f"🔱 <b>V30.0 FINAL FRONTIER REPORT</b>\n"
                     valid_stocks = 0
+                    current_month_name = datetime.now().strftime("%B")
                     
                     for idx, row in df_scan.iterrows():
                         if valid_stocks >= 3: break 
@@ -212,15 +237,19 @@ if st.button("🚀 INITIATE QUANTUM SCAN", use_container_width=True, type="prima
                             ai_score, ai_tag = deepquant_ai_score(df_hist)
                             if ai_score < 70: continue
                             
+                            # 🔱 FINAL FRONTIER CHECKS
+                            is_smart_money_in = check_smart_money(df_hist)
+                            poc_price, above_poc = calculate_poc(df_hist)
+                            seasonality_win_rate = calculate_seasonality(t_sym)
+                            
                             atr = calculate_atr(df_hist)
                             lp = float(row['close'])
                             sl_price = float(lp - (atr * ts_sensitivity)) 
                             sl_pct = round(((lp - sl_price) / lp) * 100, 1)
                             
-                            # 🎯 DYNAMIC KELLY SIZING: Risiko disesuaikan dengan AI Score
                             adjusted_risk = base_risk
-                            if ai_score >= 85: adjusted_risk = base_risk * 1.5 # Bet lebih besar jika probabilitas sangat tinggi
-                            elif ai_score < 75: adjusted_risk = base_risk * 0.5 # Bet kecil jika probabilitas pas-pasan
+                            if ai_score >= 85 and is_smart_money_in and above_poc: adjusted_risk = base_risk * 1.5 
+                            elif ai_score < 75: adjusted_risk = base_risk * 0.5 
                             
                             risk_rp = lp - sl_price
                             lot = int(((capital * (adjusted_risk/100)) / risk_rp) / 100) if risk_rp > 0 else 0
@@ -234,11 +263,15 @@ if st.button("🚀 INITIATE QUANTUM SCAN", use_container_width=True, type="prima
                             
                             st.markdown(f"""
                                 <div class='stock-card'>
-                                    <h2 style='margin:0;'>{t_sym} <span style='color:#3fb950; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
-                                    <p style='margin:10px 0;'>
-                                        <span style='background:#06b6d4; color:black; padding:3px 8px; border-radius:4px; font-weight:bold;'>🧠 AI: {ai_score}%</span>
+                                    <h2 style='margin:0;'>{t_sym} <span style='color:#f43f5e; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
+                                    <p style='margin:10px 0 5px 0;'>
+                                        <span style='background:#f43f5e; color:white; padding:3px 8px; border-radius:4px; font-weight:bold;'>🧠 AI: {ai_score}%</span>
                                         <span style='background:#d4af37; color:black; padding:3px 8px; border-radius:4px; font-weight:bold;'>🏆 Minervini</span>
-                                        <span style='background:#ef4444; color:white; padding:3px 8px; border-radius:4px; font-weight:bold;'>⚖️ Dyn. Risk: {adjusted_risk}%</span>
+                                        <span style='background:{"#22c55e" if is_smart_money_in else "#64748b"}; color:white; padding:3px 8px; border-radius:4px; font-weight:bold;'>🐋 OBV Akumulasi</span>
+                                    </p>
+                                    <p style='margin:0; font-size:13px; color:#94a3b8;'>
+                                        🎯 <b>Volume POC (6Bln):</b> Rp {poc_price} ({'Aman, Harga di atas POC' if above_poc else 'Warning: Di bawah POC'})<br>
+                                        📅 <b>Histori {current_month_name} (5 Thn):</b> Win-Rate {seasonality_win_rate}
                                     </p>
                                 </div>
                             """, unsafe_allow_html=True)
@@ -246,19 +279,19 @@ if st.button("🚀 INITIATE QUANTUM SCAN", use_container_width=True, type="prima
                             c1, c2, c3 = st.columns(3)
                             c1.metric("ENTRY", int(lp))
                             c2.metric("TRAILING STOP", int(sl_price), f"-{sl_pct}%")
-                            c3.metric("AI REC. LOT", lot)
+                            c3.metric("REC. LOT", lot)
                             
-                            pesan_tele += f"\n💎 <b>{t_sym}</b>\n🧠 Score: {ai_score}% | Risk: {adjusted_risk}%\nEntry: Rp {int(lp)}\nTrailing SL: Rp {int(sl_price)}\nLot: {lot} Lot\n"
+                            pesan_tele += f"\n💎 <b>{t_sym}</b>\n🧠 Score: {ai_score}%\n🐋 OBV: {'Akumulasi' if is_smart_money_in else 'Distribusi'}\n📅 Win-Rate {current_month_name}: {seasonality_win_rate}\nEntry: Rp {int(lp)}\nLot: {lot} Lot\n"
 
                     if valid_stocks > 0 and send_telegram:
                         requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
                     
                     st.session_state['last_scan'] = datetime.now().strftime('%H:%M:%S')
-                    status.update(label=f"Quantum Process Complete at {st.session_state['last_scan']}", state="complete", expanded=False)
-                    if valid_stocks == 0: st.warning("AI tidak menemukan probabilitas tinggi hari ini.")
+                    status.update(label=f"Frontier Scan Complete at {st.session_state['last_scan']}", state="complete", expanded=False)
+                    if valid_stocks == 0: st.warning("Mesin kuantitatif tidak menemukan saham dewa hari ini.")
         except Exception as e: st.error(f"Engine Error: {e}")
 
 if auto_pilot:
-    st.sidebar.success(f"🤖 Singularity Auto-Pilot Aktif. Memantau setiap {refresh_rate} menit...")
+    st.sidebar.success(f"🤖 Auto-Pilot Aktif. Memantau setiap {refresh_rate} menit...")
     time.sleep(refresh_rate * 60)
     st.rerun()
