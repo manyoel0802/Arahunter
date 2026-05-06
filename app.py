@@ -13,7 +13,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V25.1", layout="wide", page_icon="🤖")
+st.set_page_config(page_title="GOD MODE V26.0", layout="wide", page_icon="🏆")
 
 # --- SECURITY ---
 try:
@@ -37,13 +37,15 @@ st.markdown("""
     .main { background-color: #0d1117; }
     .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
     .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #30363d; color: white; }
-    .bg-auto { background: linear-gradient(135deg, #020617 0%, #172554 100%); border-top: 5px solid #3b82f6; }
+    .bg-grandmaster { background: linear-gradient(135deg, #1a0b2e 0%, #000000 100%); border-top: 5px solid #d4af37; }
     .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; }
     .badge-pro { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; }
+    .badge-champ { padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: bold; background: #d4af37; color: black; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ENGINES ---
+# --- GRANDMASTER ENGINES ---
+
 @st.cache_data(ttl=300)
 def get_ihsg_data():
     try: return yf.Ticker("^JKSE").history(period="3mo")
@@ -59,8 +61,7 @@ def calculate_relative_strength(stock_df, ihsg_df):
 def check_mtfa_weekly(ticker):
     try:
         w_df = yf.Ticker(f"{ticker}.JK").history(period="1y", interval="1wk")
-        sma20_w = w_df['Close'].rolling(20).mean().iloc[-1]
-        return w_df['Close'].iloc[-1] > sma20_w
+        return w_df['Close'].iloc[-1] > w_df['Close'].rolling(20).mean().iloc[-1]
     except: return False
 
 def calculate_atr(df, period=14):
@@ -70,10 +71,31 @@ def calculate_atr(df, period=14):
         return tr.rolling(period).mean().iloc[-1]
     except: return 0.0
 
+# 🏆 NEW: Mark Minervini's Trend Template (Super Strict)
+def check_minervini_template(df):
+    try:
+        if len(df) < 200: return False # Butuh data 200 hari
+        c = df['Close'].iloc[-1]
+        sma50 = df['Close'].rolling(50).mean().iloc[-1]
+        sma150 = df['Close'].rolling(150).mean().iloc[-1]
+        sma200 = df['Close'].rolling(200).mean().iloc[-1]
+        high_52 = df['High'].rolling(252).max().iloc[-1]
+        low_52 = df['Low'].rolling(252).min().iloc[-1]
+        
+        # Aturan Institusi:
+        cond1 = c > sma150 and c > sma200 # Paul Tudor Jones Rule
+        cond2 = sma150 > sma200 # Trend jangka panjang naik
+        cond3 = sma50 > sma150 and sma50 > sma200 # Trend menengah naik
+        cond4 = c > sma50 # Trend pendek naik
+        cond5 = c >= (low_52 * 1.30) # Sudah naik min 30% dari dasar
+        cond6 = c >= (high_52 * 0.75) # Berada dalam zona 25% dari rekor tertinggi (William O'Neil Rule)
+        
+        return cond1 and cond2 and cond3 and cond4 and cond5 and cond6
+    except: return False
+
 # --- LIVE TRAILING STOP TRACKER ---
 def update_trailing_stops(atr_mult, send_tele_active):
     if st.session_state['history_log'].empty: return
-    
     for index, row in st.session_state['history_log'].iterrows():
         if row['Status'] == 'OPEN':
             try:
@@ -84,7 +106,6 @@ def update_trailing_stops(atr_mult, send_tele_active):
                 cp = float(hist['Close'].iloc[-1])
                 atr = calculate_atr(hist)
                 
-                # Konversi paksa ke float agar aman dari TypeError
                 old_hwm = float(row['High_Water_Mark'])
                 old_sl = float(row['Trailing_SL'])
                 entry_price = float(row['Entry'])
@@ -100,11 +121,9 @@ def update_trailing_stops(atr_mult, send_tele_active):
                 if cp <= final_sl:
                     profit_pct = ((cp - entry_price) / entry_price) * 100
                     icon = "🟢" if profit_pct > 0 else "🔴"
-                    msg = f"🛡️ <b>TRAILING STOP HIT!</b>\n\nStock: <b>{row['Ticker']}</b>\nExit Price: {int(cp)}\nResult: {icon} <b>{round(profit_pct, 2)}%</b>"
-                    
+                    msg = f"🛡️ <b>TRAILING STOP HIT!</b>\nStock: <b>{row['Ticker']}</b>\nExit Price: {int(cp)}\nResult: {icon} <b>{round(profit_pct, 2)}%</b>"
                     if send_tele_active:
                         requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": msg, "parse_mode": "HTML"})
-                    
                     st.session_state['history_log'].at[index, 'Status'] = 'CLOSED'
             except: continue
 
@@ -113,9 +132,9 @@ ihsg_df = get_ihsg_data()
 ihsg_safe = ihsg_df['Close'].iloc[-1] > ihsg_df['Close'].rolling(20).mean().iloc[-1] if not ihsg_df.empty else True
 
 st.markdown(f"""
-    <div class='status-card bg-auto'>
-        <h1 style='margin:0; color:#60a5fa;'>🤖 GOD MODE V25.1: AUTO-PILOT</h1>
-        <p style='margin:0; opacity:0.8; color:#e2e8f0;'>Last Scan: {st.session_state['last_scan']} | IHSG: {'BULLISH' if ihsg_safe else 'BEARISH'}</p>
+    <div class='status-card bg-grandmaster'>
+        <h1 style='margin:0; color:#d4af37;'>🏆 GOD MODE V26.0: GRANDMASTER EDITION</h1>
+        <p style='margin:0; opacity:0.8; color:#e2e8f0;'>Powered by Minervini's Trend Template & O'Neil's CAN SLIM Logic</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -127,7 +146,8 @@ with st.sidebar:
     refresh_rate = st.slider("Interval Auto-Scan (Menit)", 1, 15, 5, disabled=not auto_pilot)
     
     st.divider()
-    st.header("⚙️ Strategy Config")
+    st.header("⚙️ Champion Config")
+    strict_minervini = st.toggle("🏆 Minervini Strict Filter", value=True, help="Hanya cari saham yang 100% memenuhi syarat uptrend juara dunia.")
     ts_sensitivity = st.select_slider("Sensitivitas Trailing (ATR):", options=[1.5, 2.0, 2.5, 3.0], value=2.5)
     capital = st.number_input("Portfolio Size (Rp)", value=5000000, step=1000000)
     risk_pct = st.slider("Risk Per Trade (%)", 1.0, 3.0, 2.0, step=0.5)
@@ -138,23 +158,19 @@ with st.sidebar:
     
     if not active_portfolio.empty:
         display_df = active_portfolio[['Ticker', 'Current_Price', 'Trailing_SL']].copy()
-        
-        # --- PERBAIKAN: Memaksa konversi ke format numerik (Float) sebelum kalkulasi ---
         display_df['Current_Price'] = pd.to_numeric(display_df['Current_Price'], errors='coerce')
         display_df['Trailing_SL'] = pd.to_numeric(display_df['Trailing_SL'], errors='coerce')
-        
         display_df['Jarak SL'] = ((display_df['Current_Price'] - display_df['Trailing_SL']) / display_df['Current_Price'] * 100).round(1).astype(str) + '%'
         st.dataframe(display_df, use_container_width=True, hide_index=True)
-    else: 
-        st.info("Portofolio kosong.")
+    else: st.info("Portofolio kosong.")
         
     if st.button("🧹 Clear Portfolio"):
         st.session_state['history_log'] = pd.DataFrame(columns=['Waktu', 'Ticker', 'Entry', 'Current_Price', 'High_Water_Mark', 'Trailing_SL', 'Status'])
         st.rerun()
 
 # --- EXECUTION ENGINE ---
-if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") or auto_pilot:
-    with st.status("Engine Running...", expanded=True) as status:
+if st.button("🚀 INITIATE GRANDMASTER SCAN", use_container_width=True, type="primary") or auto_pilot:
+    with st.status("Executing World Champion Algorithms...", expanded=True) as status:
         try:
             update_trailing_stops(ts_sensitivity, send_telegram)
             
@@ -165,21 +181,27 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
             if not df_raw.empty:
                 df_raw['v_ratio'] = df_raw['volume'] / df_raw['average_volume_10d_calc'].replace(0,1)
                 df_scan = df_raw[(df_raw['market_cap_basic'] >= 1e11) & (df_raw['v_ratio'] >= 1.5)]
-                df_scan = df_scan.sort_values('change', ascending=False).head(8).reset_index(drop=True)
+                df_scan = df_scan.sort_values('change', ascending=False).head(10).reset_index(drop=True)
                 
-                pesan_tele = f"🤖 <b>V25.1 AUTO-PILOT REPORT</b>\nSensitivity: {ts_sensitivity}x ATR\n"
+                pesan_tele = f"🏆 <b>V26.0 GRANDMASTER REPORT</b>\n"
                 valid_stocks = 0
                 
                 for idx, row in df_scan.iterrows():
                     if valid_stocks >= 3: break 
                     
                     t_sym = row['name']
+                    # Cek Fundamental Awal (MTFA)
                     if not check_mtfa_weekly(t_sym): continue
                     
+                    # Ambil data 2 Tahun untuk kalkulasi 200-MA & 52-Week High
                     s_obj = yf.Ticker(f"{t_sym}.JK")
-                    df_hist = s_obj.history(period="1y")
+                    df_hist = s_obj.history(period="2y")
                     
                     if not df_hist.empty:
+                        # 🏆 GRANDMASTER CHECKER
+                        is_minervini = check_minervini_template(df_hist)
+                        if strict_minervini and not is_minervini: continue # Buang saham yang tidak lolos kriteria juara
+                        
                         rs_score = calculate_relative_strength(df_hist, ihsg_df)
                         atr = calculate_atr(df_hist)
                         
@@ -188,7 +210,6 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
                         sl_pct = round(((lp - sl_price) / lp) * 100, 1)
                         
                         if t_sym not in st.session_state['history_log']['Ticker'].values:
-                            # Memastikan semua masuk sebagai angka Float/Integer
                             new_p = pd.DataFrame([[datetime.now().strftime('%H:%M'), t_sym, lp, lp, lp, sl_price, 'OPEN']], 
                                                 columns=['Waktu', 'Ticker', 'Entry', 'Current_Price', 'High_Water_Mark', 'Trailing_SL', 'Status'])
                             st.session_state['history_log'] = pd.concat([st.session_state['history_log'], new_p], ignore_index=True)
@@ -201,6 +222,7 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
                                 <p style='margin:10px 0;'>
                                     <span class='badge-pro' style='background:#1f6feb; color:white;'>RS: {rs_score}%</span>
                                     <span class='badge-pro' style='background:#8b5cf6; color:white;'>ATR: {round(atr,1)}</span>
+                                    { "<span class='badge-champ'>🏆 MINERVINI APPROVED</span>" if is_minervini else "" }
                                 </p>
                             </div>
                         """, unsafe_allow_html=True)
@@ -214,14 +236,14 @@ if st.button("🚀 MANUAL SCAN NOW", use_container_width=True, type="primary") o
                         if not ihsg_safe: lot = int(lot/2)
                         c3.metric("REC. LOT", lot)
                         
-                        pesan_tele += f"\n💎 <b>{t_sym}</b>\nEntry: Rp {int(lp)}\nTrailing SL: Rp {int(sl_price)} (-{sl_pct}%)\nLot: {lot} Lot\n"
+                        pesan_tele += f"\n💎 <b>{t_sym}</b> {'🏆' if is_minervini else ''}\nEntry: Rp {int(lp)}\nTrailing SL: Rp {int(sl_price)}\nLot: {lot} Lot\n"
 
                 if valid_stocks > 0 and send_telegram:
                     requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
                 
                 st.session_state['last_scan'] = datetime.now().strftime('%H:%M:%S')
                 status.update(label=f"Scan Complete at {st.session_state['last_scan']}", state="complete", expanded=False)
-                if valid_stocks == 0: st.warning("Tidak ada sinyal sempurna saat ini.")
+                if valid_stocks == 0: st.warning("Algoritma Juara Dunia tidak menemukan saham berkualitas tinggi hari ini. Simpan *cash* Anda.")
             else: st.info("Market sideways.")
         except Exception as e: st.error(f"System Error: {e}")
 
