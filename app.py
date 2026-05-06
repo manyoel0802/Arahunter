@@ -68,7 +68,7 @@ def analyze_sector_flow(df_raw):
     except Exception as e:
         return [], pd.DataFrame()
 
-# --- INSTITUTIONAL ENGINES (Dari V30) ---
+# --- INSTITUTIONAL ENGINES ---
 @st.cache_data(ttl=300)
 def get_macro_data():
     try:
@@ -157,7 +157,8 @@ if st.button("🚀 INITIATE TOP-DOWN SCAN", use_container_width=True, type="prim
                 top_sectors, sector_df = analyze_sector_flow(df_raw)
                 
                 st.write("📊 **Sector Heatmap Hari Ini:**")
-                st.dataframe(sector_df[['sector', 'avg_change', 'avg_v_ratio', 'momentum_score']].head(5).style.background_gradient(cmap='Greens', subset=['momentum_score']))
+                # ---> INI BAGIAN YANG SUDAH DIPERBAIKI <---
+                st.dataframe(sector_df[['sector', 'avg_change', 'avg_v_ratio', 'momentum_score']].head(5), use_container_width=True)
                 
                 if top_sectors:
                     st.success(f"🔥 Uang raksasa sedang mengalir deras ke Sektor: **{top_sectors[0]}** dan **{top_sectors[1]}**")
