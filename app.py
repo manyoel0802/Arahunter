@@ -77,3 +77,89 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- 🎛️ SIDEBAR ---
+with st.sidebar:
+    st.header("🎛️ Command Center")
+    send_telegram = st.toggle("📲 Telegram Alerts", value=True)
+    auto_pilot = st.toggle("🤖 Auto-Pilot Mode", value=False)
+    
+    st.divider()
+    st.header("⚙️ Capital & Risk")
+    capital = st.number_input("Portfolio (Rp)", value=5000000, step=1000000)
+    risk_pct = st.slider("Max Loss Per Trade (%)", 0.5, 5.0, 2.0, step=0.5)
+    
+    st.divider()
+    st.header("🛡️ Ruang Napas (Anti-Whipsaw)")
+    atr_multiplier = st.slider("Batas Toleransi (ATR)", 1.0, 3.5, 2.0, step=0.1)
+
+# --- EXECUTION ENGINE ---
+if st.button("🚀 SCAN ULTIMATE SETUPS", use_container_width=True, type="primary") or auto_pilot:
+    with st.status("Mencari setup meledak dengan titik masuk paling presisi...", expanded=True) as status:
+        try:
+            q = (Query().set_markets('indonesia')
+                 .select('name','close','volume','average_volume_10d_calc','market_cap_basic','sector')
+                 .where(Column('market_cap_basic') >= 1e11))
+            _, df_raw = q.get_scanner_data()
+            
+            if not df_raw.empty:
+                df_scan = df_raw.head(50) 
+                pesan_tele = f"🎯 <b>V38.0 ULTIMATE SNIPER REPORT</b>\n"
+                valid_stocks = 0
+                
+                for idx, row in df_scan.iterrows():
+                    if valid_stocks >= 3: break 
+                    
+                    t_sym = row['name']
+                    s_obj = yf.Ticker(f"{t_sym}.JK")
+                    df_hist = s_obj.history(period="1y")
+                    
+                    if not df_hist.empty and check_minervini_template(df_hist):
+                        if detect_squeeze(df_hist) and check_smart_money(df_hist):
+                            atr = calculate_atr(df_hist)
+                            lp = float(row['close'])
+                            
+                            sma20 = df_hist['Close'].rolling(20).mean().iloc[-1]
+                            pullback_target = lp - (atr * 0.5) 
+                            best_entry = int(max(sma20, pullback_target))
+                            
+                            distance_to_ma = ((lp - sma20) / sma20) * 100
+                            if distance_to_ma > 6.0:
+                                timing_status = "⏳ JANGAN BELI DULU (Harga Ketinggian, Antre di Bawah Saja)"
+                                timing_bg = "#f59e0b"
+                            else:
+                                timing_status = "🚀 BELI HARI INI (Area Harga Ideal)"
+                                timing_bg = "#10b981"
+                            
+                            sl_price = int(lp - (atr * atr_multiplier)) 
+                            target_price = int(lp + (atr * 4.0)) 
+                            
+                            risk_rp = lp - sl_price
+                            reward_rp = target_price - lp
+                            rrr = round(reward_rp / risk_rp, 1) if risk_rp > 0 else 0
+                            
+                            if rrr < 2.0: continue 
+                            
+                            sl_pct = round(((lp - sl_price) / lp) * 100, 1)
+                            lot = int(((capital * (risk_pct/100)) / risk_rp) / 100) if risk_rp > 0 else 0
+                            if lot == 0: continue
+                            
+                            valid_stocks += 1
+                            
+                            # ---> BUG FIX: Desain UI Digabungkan dalam 1 baris agar tidak memutus struktur Python <---
+                            html_card = f"<div class='stock-card'><h2 style='margin:0;'>{t_sym} <span style='color:#06b6d4; font-size:14px; border:1px solid #06b6d4; padding:2px 6px; border-radius:4px;'>⚖️ RRR 1:{rrr}</span></h2><p style='color:#94a3b8; font-size:14px; margin:0 0 10px 0;'>Sektor: <b>{row['sector']}</b> | Kondisi: <b>BB Squeeze (Siap Meledak)</b></p><div style='background-color:{timing_bg}; color:white; padding:8px 12px; border-radius:6px; font-weight:bold; font-size:14px; text-align:center; margin-bottom:15px;'>{timing_status}</div></div>"
+                            st.markdown(html_card, unsafe_allow_html=True)
+                            
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("🎯 ZONA BELI", f"Rp {best_entry} - {int(lp)}")
+                            c2.metric("🛡️ STOP LOSS", sl_price, f"-{sl_pct}%")
+                            c3.metric("📦 MAX LOT", lot)
+                            
+                            pesan_tele += f"\n💎 <b>{t_sym}</b> (RRR 1:{rrr})\n⚡ {timing_status}\n🎯 Antre Beli: Rp {best_entry} - {int(lp)}\n🛡️ SL (Napas {atr_multiplier}x): Rp {sl_price}\n📦 Lot: {lot} Lot\n"
+
+                if valid_stocks > 0 and send_telegram:
+                    requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
+                
+                status.update(label=f"Scan Selesai!", state="complete", expanded=False)
+                if valid_stocks == 0: st.warning("Mesin tidak menemukan saham yang memenuhi syarat ketat hari ini.")
+            else: st.info("Gagal menarik data.")
+        except Exception as e:
+            st.error(f"Engine Error: {e}")
