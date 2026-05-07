@@ -77,30 +77,3 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- 🎛️ SIDEBAR ---
-with st.sidebar:
-    st.header("🎛️ Command Center")
-    send_telegram = st.toggle("📲 Telegram Alerts", value=True)
-    auto_pilot = st.toggle("🤖 Auto-Pilot Mode", value=False)
-    
-    st.divider()
-    st.header("⚙️ Capital & Risk")
-    capital = st.number_input("Portfolio (Rp)", value=5000000, step=1000000)
-    risk_pct = st.slider("Max Loss Per Trade (%)", 0.5, 5.0, 2.0, step=0.5)
-    
-    st.divider()
-    st.header("🛡️ Ruang Napas (Anti-Whipsaw)")
-    atr_multiplier = st.slider("Batas Toleransi (ATR)", 1.0, 3.5, 2.0, step=0.1, help="Semakin besar angka, semakin jauh SL dari harga beli. Standar ayunan wajar adalah 2.0.")
-
-# --- EXECUTION ENGINE ---
-if st.button("🚀 SCAN ULTIMATE SETUPS", use_container_width=True, type="primary") or auto_pilot:
-    with st.status("Mencari setup meledak dengan titik masuk paling presisi...", expanded=True) as status:
-        try:
-            q = (Query().set_markets('indonesia')
-                 .select('name','close','volume','average_volume_10d_calc','market_cap_basic','sector')
-                 .where(Column('market_cap_basic') >= 1e11))
-            _, df_raw = q.get_scanner_data()
-            
-            if not df_raw.empty:
-                df_scan = df_raw.head(50) 
-                pesan_tele = f"🎯 <b>V38.0 ULTIMATE SNIPER REPORT</b>\n"
-                valid_stocks
