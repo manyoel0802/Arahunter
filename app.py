@@ -124,7 +124,6 @@ def update_trailing_stops(is_flash_crash, send_tele_active):
                     if send_tele_active: requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": msg, "parse_mode": "HTML"})
                     st.session_state['history_log'].at[index, 'Status'] = 'CLOSED'
             except: continue
-
 # --- UI HEADER ---
 ihsg_safe, sp500_safe, is_flash_crash = get_macro_data()
 flash_msg = "<br><span style='background:#ef4444; color:white; padding:2px 8px; border-radius:4px;'>⚠️ FLASH CRASH DETECTED</span>" if is_flash_crash else ""
@@ -132,7 +131,10 @@ flash_msg = "<br><span style='background:#ef4444; color:white; padding:2px 8px; 
 st.markdown(f"""
 <div class='status-card bg-nexus'>
     <h1 style='margin:0; color:#22d3ee;'>🎯 GOD MODE V33.1: TIMING ADVISOR</h1>
-    <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>AI Sector Flow | Minervini Template | Dynamic Entry Timing{flash_msg}</p>
+    <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>
+        🇮🇩 IHSG: <b>{'BULLISH' if ihsg_safe else 'BEARISH'}</b> | 🇺🇸 S&P 500: <b>{'BULLISH' if sp500_safe else 'BEARISH'}</b>
+        <br>AI Sector Flow | Minervini Template | Dynamic Entry Timing{flash_msg}
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
