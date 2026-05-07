@@ -12,7 +12,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V33.0", layout="wide", page_icon="🎯")
+st.set_page_config(page_title="GOD MODE V33.1", layout="wide", page_icon="🎯")
 
 # --- SECURITY & DATABASE ---
 try:
@@ -97,7 +97,6 @@ def check_minervini_template(df):
         return (c > sma150 and c > sma200 and sma150 > sma200 and sma50 > sma150 and c > sma50 and c >= (low_52 * 1.30) and c >= (high_52 * 0.75))
     except: return False
 
-# 🛡️ LIVE TRAILING STOP TRACKER 🛡️
 def update_trailing_stops(is_flash_crash, send_tele_active):
     if st.session_state['history_log'].empty: return
     active_atr_mult = 1.5 if is_flash_crash else 2.5
@@ -132,8 +131,8 @@ flash_msg = "<br><span style='background:#ef4444; color:white; padding:2px 8px; 
 
 st.markdown(f"""
 <div class='status-card bg-nexus'>
-    <h1 style='margin:0; color:#22d3ee;'>🎯 GOD MODE V33.0: PRECISION STRIKE</h1>
-    <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>AI Sector Flow | Minervini Template | Dynamic Entry Zone{flash_msg}</p>
+    <h1 style='margin:0; color:#22d3ee;'>🎯 GOD MODE V33.1: TIMING ADVISOR</h1>
+    <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>AI Sector Flow | Minervini Template | Dynamic Entry Timing{flash_msg}</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -195,7 +194,7 @@ if st.button("🚀 INITIATE PRECISION SCAN", use_container_width=True, type="pri
                 
                 df_scan = df_scan.sort_values('change', ascending=False).head(15).reset_index(drop=True)
                 
-                pesan_tele = f"🎯 <b>V33.0 PRECISION STRIKE REPORT</b>\n🔥 Hot Sectors: {', '.join(top_sectors[:2])}\n"
+                pesan_tele = f"🎯 <b>V33.1 TIMING ADVISOR REPORT</b>\n🔥 Hot Sectors: {', '.join(top_sectors[:2])}\n"
                 valid_stocks = 0
                 
                 for idx, row in df_scan.iterrows():
@@ -215,10 +214,19 @@ if st.button("🚀 INITIATE PRECISION SCAN", use_container_width=True, type="pri
                         atr = calculate_atr(df_hist)
                         lp = float(row['close'])
                         
-                        # 🎯 LOGIKA ZONA ENTRY TERBAIK (PRECISION STRIKE)
+                        # 🎯 LOGIKA ZONA ENTRY & TIMING ADVISOR
                         sma20 = df_hist['Close'].rolling(20).mean().iloc[-1]
                         pullback_target = lp - (atr * 0.5) 
-                        best_entry = int(max(sma20, pullback_target)) # Mencegah antre terlalu bawah tembus SMA20
+                        best_entry = int(max(sma20, pullback_target))
+                        
+                        # Cek jarak harga dari SMA-20 (Overextended Check)
+                        distance_to_ma = ((lp - sma20) / sma20) * 100
+                        if distance_to_ma > 6.0:
+                            timing_status = "⏳ JANGAN HAJAR KANAN (Harga Terlalu Tinggi, Antre di Bawah!)"
+                            timing_bg = "#f59e0b" # Kuning/Amber
+                        else:
+                            timing_status = "🚀 BELI HARI INI (Harga sedang di area ideal)"
+                            timing_bg = "#10b981" # Hijau
                         
                         sl_price = float(lp - (atr * 2.5)) 
                         sl_pct = round(((lp - sl_price) / lp) * 100, 1)
@@ -241,21 +249,23 @@ if st.button("🚀 INITIATE PRECISION SCAN", use_container_width=True, type="pri
                             <div class='stock-card'>
                                 <h2 style='margin:0;'>{t_sym} <span style='color:#06b6d4; font-size:18px;'>+{round(row['change'],2)}%</span></h2>
                                 <p style='color:#94a3b8; font-size:14px; margin:0 0 10px 0;'>🏭 Sector: <b>{t_sector}</b></p>
-                                <p style='margin:0 0 5px 0;'>
+                                <p style='margin:0 0 10px 0;'>
                                     <span style='background:#10b981; color:white; padding:3px 8px; border-radius:4px; font-weight:bold;'>🧠 AI: {ai_score}%</span>
                                     <span style='background:#d4af37; color:black; padding:3px 8px; border-radius:4px; font-weight:bold;'>🏆 Minervini</span>
                                     <span style='background:{"#0ea5e9" if is_smart_money else "#64748b"}; color:white; padding:3px 8px; border-radius:4px; font-weight:bold;'>🐋 OBV</span>
                                 </p>
+                                <div style='background-color:{timing_bg}; color:white; padding:8px 12px; border-radius:6px; font-weight:bold; font-size:14px; text-align:center; margin-bottom:15px;'>
+                                    {timing_status}
+                                </div>
                             </div>
                         """, unsafe_allow_html=True)
                         
                         c1, c2, c3 = st.columns(3)
-                        # TAMPILAN ZONA BELI BARU
                         c1.metric("🎯 ZONA BELI TERBAIK", f"Rp {best_entry} - {int(lp)}")
                         c2.metric("🛡️ TRAILING STOP", int(sl_price), f"-{sl_pct}%")
                         c3.metric("📦 REC. LOT", lot)
                         
-                        pesan_tele += f"\n💎 <b>{t_sym}</b> ({t_sector})\n🎯 Buy Zone: Rp {best_entry} - Rp {int(lp)}\n🛡️ Trailing SL: Rp {int(sl_price)}\n📦 Lot: {lot} Lot\n"
+                        pesan_tele += f"\n💎 <b>{t_sym}</b> ({t_sector})\n⚡ Status: {timing_status}\n🎯 Buy Zone: Rp {best_entry} - Rp {int(lp)}\n🛡️ Trailing SL: Rp {int(sl_price)}\n📦 Lot: {lot} Lot\n"
 
                 if valid_stocks > 0 and send_telegram:
                     requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
