@@ -11,7 +11,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V40.0", layout="wide", page_icon="👁️")
+st.set_page_config(page_title="GOD MODE V40.1", layout="wide", page_icon="👁️")
 
 try:
     TELE_TOKEN = st.secrets["TELE_TOKEN"]
@@ -87,7 +87,7 @@ ihsg_aman = get_ihsg_status()
 
 st.markdown(f"""
 <div class='status-card bg-oracle'>
-    <h1 style='margin:0; color:#5eead4;'>👁️ GOD MODE V40.0: THE ORACLE</h1>
+    <h1 style='margin:0; color:#5eead4;'>👁️ GOD MODE V40.1: THE ORACLE</h1>
     <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>
         Pencari Probabilitas Absolut | The Confluence Matrix | Anti-Kepastian Semu
     </p>
@@ -125,7 +125,7 @@ if st.button("🚀 INITIATE CONFLUENCE SCAN", use_container_width=True, type="pr
                 
                 if not df_raw.empty:
                     df_scan = df_raw.head(50) 
-                    pesan_tele = f"👁️ <b>V40.0 ORACLE CONVICTION REPORT</b>\n"
+                    pesan_tele = f"👁️ <b>V40.1 ORACLE CONVICTION REPORT</b>\n"
                     valid_stocks = 0
                     
                     for idx, row in df_scan.iterrows():
@@ -166,25 +166,8 @@ if st.button("🚀 INITIATE CONFLUENCE SCAN", use_container_width=True, type="pr
                                 
                                 valid_stocks += 1
                                 
-                                # 👁️ THE CONVICTION MATRIX UI
-                                html_card = f"""
-                                <div class='stock-card'>
-                                    <h2 style='margin:0;'>{t_sym} <span style='color:#5eead4; font-size:14px; border:1px solid #5eead4; padding:2px 6px; border-radius:4px;'>MAX PROBABILITY SETUP</span></h2>
-                                    <p style='color:#94a3b8; font-size:14px; margin:0 0 10px 0;'>Sektor: <b>{row['sector']}</b> | Entry: <b>{timing_status}</b></p>
-                                    
-                                    <div class='matrix-box'>
-                                        <p style='margin:0 0 5px 0; color:#cbd5e1; font-weight:bold; font-size:12px; text-transform:uppercase;'>The Confluence Matrix (Pilar Konfirmasi):</p>
-                                        <ul style='margin:0; padding-left:20px; font-size:14px; color:#10b981; line-height:1.6;'>
-                                            <li><b>Fundamental:</b> Perusahaan mencetak laba (EPS Rp {eps_value})</li>
-                                            <li><b>Trend Makro:</b> Saham terkonfirmasi dalam fase Uptrend Kuat (Minervini)</li>
-                                            <li><b>Bandarmologi:</b> OBV mengkonfirmasi jejak akumulasi Uang Raksasa</li>
-                                            <li><b>Momentum:</b> Volatilitas sedang menyempit ekstrem (BB Squeeze Breakout)</li>
-                                            <li><b>Risk Management:</b> Potensi untung {rrr}x lipat dari potensi rugi</li>
-                                        </ul>
-                                    </div>
-                                    <p style='margin:10px 0 0 0; font-size:11px; color:#64748b; font-style:italic;'>*Peringatan: 5 Pilar terpenuhi menghasilkan Probabilitas Kemenangan 70%-80%. Selalu gunakan Lot Management, karena di bursa saham, kemungkinan 100% adalah sebuah ilusi.</p>
-                                </div>
-                                """
+                                # ---> BUG FIX: Seluruh UI The Confluence Matrix dipadatkan ke dalam satu baris (one-liner) <---
+                                html_card = f"<div class='stock-card'><h2 style='margin:0;'>{t_sym} <span style='color:#5eead4; font-size:14px; border:1px solid #5eead4; padding:2px 6px; border-radius:4px;'>MAX PROBABILITY SETUP</span></h2><p style='color:#94a3b8; font-size:14px; margin:0 0 10px 0;'>Sektor: <b>{row['sector']}</b> | Entry: <b>{timing_status}</b></p><div class='matrix-box'><p style='margin:0 0 5px 0; color:#cbd5e1; font-weight:bold; font-size:12px; text-transform:uppercase;'>The Confluence Matrix (Pilar Konfirmasi):</p><ul style='margin:0; padding-left:20px; font-size:14px; color:#10b981; line-height:1.6;'><li><b>Fundamental:</b> Perusahaan mencetak laba (EPS Rp {eps_value})</li><li><b>Trend Makro:</b> Saham terkonfirmasi dalam fase Uptrend Kuat (Minervini)</li><li><b>Bandarmologi:</b> OBV mengkonfirmasi jejak akumulasi Uang Raksasa</li><li><b>Momentum:</b> Volatilitas sedang menyempit ekstrem (BB Squeeze Breakout)</li><li><b>Risk Management:</b> Potensi untung {rrr}x lipat dari potensi rugi</li></ul></div><p style='margin:10px 0 0 0; font-size:11px; color:#64748b; font-style:italic;'>*Peringatan: 5 Pilar terpenuhi menghasilkan Probabilitas Kemenangan 70%-80%. Selalu gunakan Lot Management, karena di bursa saham, kemungkinan 100% adalah sebuah ilusi.</p></div>"
                                 st.markdown(html_card, unsafe_allow_html=True)
                                 
                                 c1, c2, c3 = st.columns(3)
@@ -199,6 +182,4 @@ if st.button("🚀 INITIATE CONFLUENCE SCAN", use_container_width=True, type="pr
                     
                     status.update(label=f"Scan Selesai!", state="complete", expanded=False)
                     if valid_stocks == 0: st.warning("Tidak ada saham yang memenuhi kelima pilar konfirmasi secara bersamaan hari ini. Kesabaran adalah kunci.")
-                else: st.info("Gagal menarik data.")
-            except Exception as e:
-                st.error(f"Engine Error: {e}")
+                else: st
