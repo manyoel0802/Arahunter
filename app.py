@@ -182,4 +182,6 @@ if st.button("🚀 INITIATE CONFLUENCE SCAN", use_container_width=True, type="pr
                     
                     status.update(label=f"Scan Selesai!", state="complete", expanded=False)
                     if valid_stocks == 0: st.warning("Tidak ada saham yang memenuhi kelima pilar konfirmasi secara bersamaan hari ini. Kesabaran adalah kunci.")
-                else: st
+                else: st.info("Gagal menarik data.")
+            except Exception as e:
+                st.error(f"Engine Error: {e}")
