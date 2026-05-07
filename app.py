@@ -11,7 +11,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 pd.options.mode.chained_assignment = None
 
-st.set_page_config(page_title="GOD MODE V37.1", layout="wide", page_icon="⚖️")
+st.set_page_config(page_title="GOD MODE V38.0", layout="wide", page_icon="🎯")
 
 try:
     TELE_TOKEN = st.secrets["TELE_TOKEN"]
@@ -28,12 +28,12 @@ st.markdown("""
     .main { background-color: #0d1117; }
     .stMetric { background-color: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
     .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #30363d; color: white; }
-    .bg-asym { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #4c1d95 100%); border-top: 5px solid #8b5cf6; box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4); }
-    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 5px solid #8b5cf6; }
+    .bg-ultimate { background: linear-gradient(135deg, #020617 0%, #0f766e 50%, #0369a1 100%); border-top: 5px solid #06b6d4; box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4); }
+    .stock-card { background-color: #1c2128; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 5px solid #06b6d4; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- ⚖️ ASYMMETRIC ENGINES ---
+# --- 🎯 ULTIMATE ENGINES ---
 def calculate_atr(df, period=14):
     try:
         tr = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift()), abs(df['Low'] - df['Close'].shift())))
@@ -68,10 +68,10 @@ def check_smart_money(df):
 
 # --- UI HEADER ---
 st.markdown(f"""
-<div class='status-card bg-asym'>
-    <h1 style='margin:0; color:#c4b5fd;'>⚖️ GOD MODE V37.1: ADJUSTABLE SNIPER</h1>
+<div class='status-card bg-ultimate'>
+    <h1 style='margin:0; color:#22d3ee;'>🎯 GOD MODE V38.0: THE ULTIMATE SNIPER</h1>
     <p style='margin:5px 0 0 0; opacity:0.9; color:#e2e8f0;'>
-        Max Profit | Adjustable Trailing Stop | Volatility Squeeze
+        BB Squeeze | Adjustable Trailing Stop | Best Entry Zone | Timing Advisor
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -89,11 +89,11 @@ with st.sidebar:
     
     st.divider()
     st.header("🛡️ Ruang Napas (Anti-Whipsaw)")
-    atr_multiplier = st.slider("Batas Toleransi (ATR Multiplier)", 1.0, 3.5, 2.0, step=0.1, help="Semakin besar angka, semakin jauh SL dari harga beli. 2.0 adalah standar aman untuk menghindari bandar usil.")
+    atr_multiplier = st.slider("Batas Toleransi (ATR)", 1.0, 3.5, 2.0, step=0.1, help="Semakin besar angka, semakin jauh SL dari harga beli. Standar ayunan wajar adalah 2.0.")
 
 # --- EXECUTION ENGINE ---
-if st.button("🚀 SCAN ASYMMETRIC SETUPS", use_container_width=True, type="primary") or auto_pilot:
-    with st.status("Mencari pergerakan ekstrem dengan toleransi dinamis...", expanded=True) as status:
+if st.button("🚀 SCAN ULTIMATE SETUPS", use_container_width=True, type="primary") or auto_pilot:
+    with st.status("Mencari setup meledak dengan titik masuk paling presisi...", expanded=True) as status:
         try:
             q = (Query().set_markets('indonesia')
                  .select('name','close','volume','average_volume_10d_calc','market_cap_basic','sector')
@@ -102,7 +102,7 @@ if st.button("🚀 SCAN ASYMMETRIC SETUPS", use_container_width=True, type="prim
             
             if not df_raw.empty:
                 df_scan = df_raw.head(50) 
-                pesan_tele = f"⚖️ <b>V37.1 ADJUSTABLE REPORT</b>\n"
+                pesan_tele = f"🎯 <b>V38.0 ULTIMATE SNIPER REPORT</b>\n"
                 valid_stocks = 0
                 
                 for idx, row in df_scan.iterrows():
@@ -117,7 +117,20 @@ if st.button("🚀 SCAN ASYMMETRIC SETUPS", use_container_width=True, type="prim
                             atr = calculate_atr(df_hist)
                             lp = float(row['close'])
                             
-                            # 🎯 MENGGUNAKAN RUANG NAPAS DARI SIDEBAR
+                            # 🎯 LOGIKA ZONA ENTRY & TIMING ADVISOR
+                            sma20 = df_hist['Close'].rolling(20).mean().iloc[-1]
+                            pullback_target = lp - (atr * 0.5) 
+                            best_entry = int(max(sma20, pullback_target))
+                            
+                            distance_to_ma = ((lp - sma20) / sma20) * 100
+                            if distance_to_ma > 6.0:
+                                timing_status = "⏳ JANGAN BELI DULU (Harga Ketinggian, Antre di Bawah Saja)"
+                                timing_bg = "#f59e0b" # Kuning Peringatan
+                            else:
+                                timing_status = "🚀 BELI HARI INI (Area Harga Ideal)"
+                                timing_bg = "#10b981" # Hijau Aman
+                            
+                            # 🛡️ LOGIKA STOP LOSS & TARGET
                             sl_price = int(lp - (atr * atr_multiplier)) 
                             target_price = int(lp + (atr * 4.0)) 
                             
@@ -125,7 +138,7 @@ if st.button("🚀 SCAN ASYMMETRIC SETUPS", use_container_width=True, type="prim
                             reward_rp = target_price - lp
                             rrr = round(reward_rp / risk_rp, 1) if risk_rp > 0 else 0
                             
-                            if rrr < 2.0: continue # Batas RRR dilonggarkan agar menyesuaikan SL yang longgar
+                            if rrr < 2.0: continue 
                             
                             sl_pct = round(((lp - sl_price) / lp) * 100, 1)
                             lot = int(((capital * (risk_pct/100)) / risk_rp) / 100) if risk_rp > 0 else 0
@@ -135,23 +148,26 @@ if st.button("🚀 SCAN ASYMMETRIC SETUPS", use_container_width=True, type="prim
                             
                             st.markdown(f"""
                                 <div class='stock-card'>
-                                    <h2 style='margin:0;'>{t_sym} <span style='color:#c4b5fd; font-size:14px; border:1px solid #c4b5fd; padding:2px 6px; border-radius:4px;'>⚖️ RRR 1:{rrr}</span></h2>
+                                    <h2 style='margin:0;'>{t_sym} <span style='color:#06b6d4; font-size:14px; border:1px solid #06b6d4; padding:2px 6px; border-radius:4px;'>⚖️ RRR 1:{rrr}</span></h2>
                                     <p style='color:#94a3b8; font-size:14px; margin:0 0 10px 0;'>Sektor: <b>{row['sector']}</b> | Kondisi: <b>BB Squeeze (Siap Meledak)</b></p>
+                                    
+                                    <div style='background-color:{timing_bg}; color:white; padding:8px 12px; border-radius:6px; font-weight:bold; font-size:14px; text-align:center; margin-bottom:15px;'>
+                                        {timing_status}
+                                    </div>
                                 </div>
                             """, unsafe_allow_html=True)
                             
-                            c1, c2, c3, c4 = st.columns(4)
-                            c1.metric("ENTRY AWAL", int(lp))
+                            c1, c2, c3 = st.columns(3)
+                            c1.metric("🎯 ZONA BELI", f"Rp {best_entry} - {int(lp)}")
                             c2.metric("🛡️ STOP LOSS", sl_price, f"-{sl_pct}%")
-                            c3.metric("🎯 TARGET", target_price)
-                            c4.metric("📦 MAX LOT", lot)
+                            c3.metric("📦 MAX LOT", lot)
                             
-                            pesan_tele += f"\n💎 <b>{t_sym}</b> (RRR 1:{rrr})\nEntry: Rp {int(lp)}\n🛡️ SL (Napas {atr_multiplier}x): Rp {sl_price}\n🎯 Target: Rp {target_price}\n📦 Lot: {lot} Lot\n"
+                            pesan_tele += f"\n💎 <b>{t_sym}</b> (RRR 1:{rrr})\n⚡ {timing_status}\n🎯 Antre Beli: Rp {best_entry} - {int(lp)}\n🛡️ SL (Napas {atr_multiplier}x): Rp {sl_price}\n📦 Lot: {lot} Lot\n"
 
                 if valid_stocks > 0 and send_telegram:
                     requests.post(f"https://api.telegram.org/bot{TELE_TOKEN}/sendMessage", data={"chat_id": TELE_CHAT_ID, "text": pesan_tele, "parse_mode": "HTML"})
                 
                 status.update(label=f"Scan Selesai!", state="complete", expanded=False)
-                if valid_stocks == 0: st.warning("Mesin tidak menemukan saham dengan Risk/Reward yang pas saat ini. Santai sejenak.")
+                if valid_stocks == 0: st.warning("Mesin tidak menemukan saham yang memenuhi syarat ketat hari ini.")
             else: st.info("Gagal menarik data.")
         except Exception as e: st.error(f"Engine Error: {e}")
