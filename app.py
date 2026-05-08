@@ -2,165 +2,162 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import numpy as np
-import time # Protokol Anti-Rate Limit
-import warnings
+import time
+import datetime
 
-warnings.filterwarnings('ignore')
+# --- 🚀 ENTERPRISE CONFIGURATION ---
+st.set_page_config(page_title="OMNI-ORACLE V60.0", layout="wide", page_icon="🏛️")
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="GLOBAL ORACLE V50.1", layout="wide", page_icon="🌎")
-
+# Custom CSS for Professional Dark Theme
 st.markdown("""
     <style>
-    .main { background-color: #09090b; }
-    .stMetric { background-color: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 15px; }
-    .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #3f3f46; color: white; }
-    .bg-global { background: linear-gradient(135deg, #1e1b4b 0%, #4338ca 50%, #1e1b4b 100%); border-top: 5px solid #6366f1; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3); }
-    .asset-card { background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px; margin-top: 15px; border-left: 5px solid #6366f1; }
+    .main { background-color: #020617; }
+    .stMetric { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+    .status-card { border-radius: 15px; padding: 25px; margin-bottom: 25px; border: 1px solid #1e293b; color: white; }
+    .bg-omni { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-bottom: 4px solid #6366f1; }
+    .card-signal { background-color: #1e293b; border-left: 5px solid #6366f1; padding: 20px; border-radius: 8px; margin-bottom: 15px; }
+    .warning-box { background-color: #450a0a; border: 1px solid #991b1b; color: #fca5a5; padding: 15px; border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 🧠 QUANTITATIVE ENGINES ---
-def calculate_atr(df, period=14):
-    try:
-        tr = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift()), abs(df['Low'] - df['Close'].shift())))
-        return tr.rolling(period).mean().iloc[-1]
-    except: return 0.0
+# --- 🧠 CORE QUANTITATIVE ENGINE ---
+class OmniEngine:
+    @staticmethod
+    def get_indicators(df):
+        try:
+            # Trend
+            df['SMA50'] = df['Close'].rolling(50).mean()
+            df['SMA200'] = df['Close'].rolling(200).mean()
+            # Volatility Squeeze
+            df['SMA20'] = df['Close'].rolling(20).mean()
+            df['STD20'] = df['Close'].rolling(20).std()
+            df['Upper'] = df['SMA20'] + (df['STD20'] * 2)
+            df['Lower'] = df['SMA20'] - (df['STD20'] * 2)
+            df['BW'] = (df['Upper'] - df['Lower']) / df['SMA20']
+            # ATR for Risk
+            tr = np.maximum((df['High'] - df['Low']), np.maximum(abs(df['High'] - df['Close'].shift()), abs(df['Low'] - df['Close'].shift())))
+            df['ATR'] = tr.rolling(14).mean()
+            return df
+        except: return df
 
-def detect_squeeze(df):
-    try:
-        df['SMA20'] = df['Close'].rolling(20).mean()
-        df['STD20'] = df['Close'].rolling(20).std()
-        df['Band_Width'] = ((df['SMA20'] + (df['STD20'] * 2)) - (df['SMA20'] - (df['STD20'] * 2))) / df['SMA20']
-        return df['Band_Width'].iloc[-1] <= (df['Band_Width'].tail(20).min() * 1.15) 
-    except: return False
+    @staticmethod
+    def check_setup(df, market_type):
+        if len(df) < 200: return None
+        curr = df.iloc[-1]
+        prev_bw_min = df['BW'].tail(20).min()
+        
+        # Logic: Trend + Squeeze
+        is_uptrend = curr['Close'] > curr['SMA50'] > curr['SMA200']
+        is_downtrend = curr['Close'] < curr['SMA50'] < curr['SMA200']
+        is_squeeze = curr['BW'] <= (prev_bw_min * 1.15)
+        
+        if is_squeeze:
+            if is_uptrend: return "BULLISH"
+            if is_downtrend and market_type != "IHSG STOCKS": return "BEARISH"
+        return None
 
-def check_trend(df, mode="CRYPTO"):
-    try:
-        c = df['Close'].iloc[-1]
-        if mode == "CRYPTO":
-            sma20 = df['Close'].rolling(20).mean().iloc[-1]
-            sma50 = df['Close'].rolling(50).mean().iloc[-1]
-            return "BULLISH" if (c > sma20 and sma20 > sma50) else "SIDEWAYS"
-        else: # FOREX/GOLD
-            ema50 = df['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
-            ema200 = df['Close'].ewm(span=200, adjust=False).mean().iloc[-1]
-            if c > ema50 and ema50 > ema200: return "BULLISH"
-            elif c < ema50 and ema50 < ema200: return "BEARISH"
-            return "SIDEWAYS"
-    except: return "SIDEWAYS"
-
-# --- UI HEADER ---
+# --- 🏛️ UI: COMMAND CENTER ---
 st.markdown("""
-<div class='status-card bg-global'>
-    <h1 style='margin:0; color:#f0f9ff;'>🌎 GLOBAL ORACLE V50.1</h1>
-    <p style='margin:5px 0 0 0; opacity:0.9; color:#c7d2fe;'>
-        Multi-Asset Engine: Crypto, Forex, & Gold | Anti-Rate Limit Protocol Active
-    </p>
+<div class='status-card bg-omni'>
+    <h1 style='margin:0;'>🏛️ OMNI-ORACLE SYSTEM V60.0</h1>
+    <p style='margin:5px 0 0 0; opacity:0.8;'>Institutional Multi-Asset Quantitative Terminal</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 🎛️ COMMAND CENTER ---
 with st.sidebar:
-    st.header("⚙️ Global Settings")
-    market_type = st.radio("Pilih Market:", ["CRYPTO (USD)", "FOREX & GOLD"])
-    capital = st.number_input("Modal Trading (USD)", value=1000, step=100)
-    risk_pct = st.slider("Max Loss Per Trade (%)", 0.5, 5.0, 1.0, step=0.5)
+    st.header("🕹️ Terminal Control")
+    m_type = st.selectbox("Market Universe", ["IHSG STOCKS", "CRYPTO (USDT)", "FOREX & GOLD"])
     
     st.divider()
-    st.info("💡 **Anti-Rate Limit:** Sistem akan memberikan jeda 1.5 detik antar aset untuk menghindari pemblokiran server.")
+    st.header("💰 Capital Allocation")
+    balance = st.number_input("Portfolio Balance (USD/IDR)", value=10000000 if m_type == "IHSG STOCKS" else 1000)
+    risk_per_trade = st.slider("Risk Per Trade (%)", 0.5, 3.0, 1.0)
+    
+    st.divider()
+    st.header("🔑 API Connection")
+    api_key = st.text_input("Professional API Key (Optional)", type="password", help="Gunakan TwelveData atau GoAPI untuk Skor 10/10")
 
-# --- ASSET LISTS ---
-crypto_list = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD', 'LINK-USD', 'NEAR-USD']
-fx_pairs = {
-    'XAUUSD=X': ('GOLD', 100),
-    'EURUSD=X': ('EUR/USD', 100000),
-    'GBPUSD=X': ('GBP/USD', 100000),
-    'USDJPY=X': ('USD/JPY', 100000),
-    'AUDUSD=X': ('AUD/USD', 100000)
+# --- 🛰️ ASSET UNIVERSE ---
+universes = {
+    "IHSG STOCKS": ['BBCA.JK', 'BMRI.JK', 'BBRI.JK', 'TLKM.JK', 'ASII.JK', 'BBNI.JK', 'ADRO.JK', 'GOTO.JK', 'AMRT.JK', 'PANI.JK'],
+    "CRYPTO (USDT)": ['BTC-USD', 'ETH-USD', 'SOL-USD', 'BNB-USD', 'AVAX-USD', 'NEAR-USD', 'LINK-USD', 'RENDER-USD'],
+    "FOREX & GOLD": ['XAUUSD=X', 'EURUSD=X', 'GBPUSD=X', 'USDJPY=X', 'AUDUSD=X']
 }
 
-# --- EXECUTION ---
-if st.button(f"🚀 SCAN {market_type}", use_container_width=True, type="primary"):
-    with st.status(f"Scanning {market_type} Assets...", expanded=True) as status:
-        try:
-            valid_setups = 0
-            assets = crypto_list if market_type == "CRYPTO (USD)" else fx_pairs.keys()
-            
-            for symbol in assets:
-                st.write(f"🔍 Memeriksa {symbol}...")
+# --- 🚀 EXECUTION ---
+if st.button(f"RUN QUANTITATIVE SCAN: {m_type}", use_container_width=True, type="primary"):
+    with st.status(f"Processing {m_type} Architecture...", expanded=True) as status:
+        results = []
+        assets = universes[m_type]
+        
+        for symbol in assets:
+            try:
+                st.write(f"📡 Analyzing {symbol}...")
+                time.sleep(1.2) # Hardened Anti-Rate Limit
                 
-                # PROTOKOL ANTI-RATE LIMIT
-                time.sleep(1.5) 
+                raw_data = yf.download(symbol, period="1y", interval="1d", progress=False)
+                if raw_data.empty: continue
                 
-                ticker = yf.Ticker(symbol)
-                df_hist = ticker.history(period="1y")
+                df = OmniEngine.get_indicators(raw_data)
+                signal = OmniEngine.check_setup(df, m_type)
                 
-                if df_hist.empty:
-                    st.warning(f"Data {symbol} tidak ditemukan atau limit tercapai.")
-                    continue
-                
-                mode = "CRYPTO" if market_type == "CRYPTO (USD)" else "FOREX"
-                trend = check_trend(df_hist, mode=mode)
-                
-                if trend == "SIDEWAYS": continue
-                
-                if detect_squeeze(df_hist):
-                    atr = calculate_atr(df_hist)
-                    lp = float(df_hist['Close'].iloc[-1])
-                    sma20 = float(df_hist['Close'].rolling(20).mean().iloc[-1])
+                if signal:
+                    curr = df.iloc[-1]
+                    atr = curr['ATR']
+                    price = curr['Close']
                     
-                    # Logic Setup
-                    if trend == "BULLISH":
-                        trigger = max(sma20, lp)
-                        sl = trigger - (atr * 2.5)
-                        tp = trigger + (atr * 5.0)
-                        action = "BUY"
-                    else: # Only for Forex Bearish
-                        trigger = min(sma20, lp)
-                        sl = trigger + (atr * 2.5)
-                        tp = trigger - (atr * 5.0)
-                        action = "SELL"
+                    # Risk Calculation
+                    sl_dist = atr * 2.5
+                    sl = (price - sl_dist) if signal == "BULLISH" else (price + sl_dist)
+                    tp = (price + (sl_dist * 2)) if signal == "BULLISH" else (price - (sl_dist * 2))
                     
-                    risk_dist = abs(trigger - sl)
-                    rrr = abs(tp - trigger) / risk_dist if risk_dist > 0 else 0
-                    
-                    if rrr < 2.0: continue
-                    
-                    # Position Sizing
-                    max_loss_usd = capital * (risk_pct/100)
-                    if mode == "CRYPTO":
-                        size = max_loss_usd / risk_dist
-                        unit = "KOIN"
+                    # Size Engine
+                    risk_amount = balance * (risk_per_trade / 100)
+                    if m_type == "IHSG STOCKS":
+                        size = int((risk_amount / (sl_dist * 100))) # Convert to Lots
+                        unit = "Lot"
+                    elif m_type == "CRYPTO (USDT)":
+                        size = risk_amount / sl_dist
+                        unit = "Unit"
                     else:
-                        contract = fx_pairs[symbol][1]
-                        size = max_loss_usd / (risk_dist * contract) if "JPY" not in symbol else max_loss_usd / (risk_dist * (100000/lp))
-                        size = round(max(0.01, size), 2)
-                        unit = "LOT (MT4)"
-                    
-                    valid_setups += 1
-                    color = "#10b981" if action == "BUY" else "#ef4444"
-                    
+                        size = round(risk_amount / (sl_dist * 100000), 2) if "JPY" not in symbol else round(risk_amount / (sl_dist * (100000/price)), 2)
+                        unit = "Standard Lot"
+
+                    results.append({
+                        "Symbol": symbol, "Signal": signal, "Price": price,
+                        "SL": sl, "TP": tp, "Size": size, "Unit": unit
+                    })
+            except Exception as e:
+                st.error(f"Hardware Fault on {symbol}: {e}")
+
+        # --- 📊 OUTPUT DISPLAY ---
+        if results:
+            status.update(label="Analysis Complete. Signals Found!", state="complete")
+            
+            # Exposure Check (Correlation Filter)
+            if len(results) > 2:
+                st.markdown(f"""
+                <div class='warning-box'>
+                    ⚠️ <b>HIGH EXPOSURE WARNING:</b> Ditemukan {len(results)} sinyal bersamaan. 
+                    Pastikan korelasi antar aset tidak terlalu tinggi untuk menghindari Margin Call massal.
+                </div>
+                """, unsafe_allow_html=True)
+
+            for res in results:
+                with st.container():
+                    color = "#10b981" if res['Signal'] == "BULLISH" else "#ef4444"
                     st.markdown(f"""
-                    <div class='asset-card'>
-                        <h2 style='margin:0; color:{color};'>{action} {symbol.replace('=X', '')}</h2>
-                        <div style='margin-top:10px; font-size:14px; color:#a1a1aa;'>
-                            Setup terdeteksi! Volatilitas menyempit (Squeeze) dalam tren <b>{trend}</b>.
-                        </div>
+                    <div class='card-signal'>
+                        <h3 style='margin:0; color:{color};'>{res['Signal']} | {res['Symbol']}</h3>
+                        <p style='color:#94a3b8; font-size:14px;'>SOP: Entry {res['Price']:.2f} | RRR 1:2 Ready</p>
                     </div>
                     """, unsafe_allow_html=True)
                     
                     c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("🎯 ENTRY", f"{trigger:.4f}")
-                    c2.metric("🛡️ STOP LOSS", f"{sl:.4f}")
-                    c3.metric("💰 TARGET", f"{tp:.4f}")
-                    c4.metric(f"📦 SIZE ({unit})", f"{size:.4f}")
-
-            status.update(label="Scanning Selesai!", state="complete", expanded=False)
-            if valid_setups == 0: st.info("Tidak ada setup berkualitas tinggi saat ini. Tetap disiplin, Kapten!")
-            
-        except Exception as e:
-            if "Too Many Requests" in str(e):
-                st.error("🚨 **RATE LIMIT TERDETEKSI!** Yahoo Finance memblokir IP Anda sementara. Jangan tekan tombol Scan lagi, tunggu 15-30 menit.")
-            else:
-                st.error(f"Engine Error: {e}")
+                    c1.metric("ENTRY", f"{res['Price']:.2f}")
+                    c2.metric("STOP LOSS", f"{res['SL']:.2f}")
+                    c3.metric("TAKE PROFIT", f"{res['TP']:.2f}")
+                    c4.metric("POSITION SIZE", f"{res['Size']} {res['Unit']}")
+        else:
+            status.update(label="Scanning Finished. No Setup Found.", state="complete")
+            st.info("Sistem tetap dalam mode siaga. Tidak ada setup yang memenuhi standar institusi hari ini.")
