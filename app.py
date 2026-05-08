@@ -113,4 +113,54 @@ if st.button(f"🚀 SCAN {market_type}", use_container_width=True, type="primary
                     # Logic Setup
                     if trend == "BULLISH":
                         trigger = max(sma20, lp)
-                        sl = trigger - (atr *
+                        sl = trigger - (atr * 2.5)
+                        tp = trigger + (atr * 5.0)
+                        action = "BUY"
+                    else: # Only for Forex Bearish
+                        trigger = min(sma20, lp)
+                        sl = trigger + (atr * 2.5)
+                        tp = trigger - (atr * 5.0)
+                        action = "SELL"
+                    
+                    risk_dist = abs(trigger - sl)
+                    rrr = abs(tp - trigger) / risk_dist if risk_dist > 0 else 0
+                    
+                    if rrr < 2.0: continue
+                    
+                    # Position Sizing
+                    max_loss_usd = capital * (risk_pct/100)
+                    if mode == "CRYPTO":
+                        size = max_loss_usd / risk_dist
+                        unit = "KOIN"
+                    else:
+                        contract = fx_pairs[symbol][1]
+                        size = max_loss_usd / (risk_dist * contract) if "JPY" not in symbol else max_loss_usd / (risk_dist * (100000/lp))
+                        size = round(max(0.01, size), 2)
+                        unit = "LOT (MT4)"
+                    
+                    valid_setups += 1
+                    color = "#10b981" if action == "BUY" else "#ef4444"
+                    
+                    st.markdown(f"""
+                    <div class='asset-card'>
+                        <h2 style='margin:0; color:{color};'>{action} {symbol.replace('=X', '')}</h2>
+                        <div style='margin-top:10px; font-size:14px; color:#a1a1aa;'>
+                            Setup terdeteksi! Volatilitas menyempit (Squeeze) dalam tren <b>{trend}</b>.
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("🎯 ENTRY", f"{trigger:.4f}")
+                    c2.metric("🛡️ STOP LOSS", f"{sl:.4f}")
+                    c3.metric("💰 TARGET", f"{tp:.4f}")
+                    c4.metric(f"📦 SIZE ({unit})", f"{size:.4f}")
+
+            status.update(label="Scanning Selesai!", state="complete", expanded=False)
+            if valid_setups == 0: st.info("Tidak ada setup berkualitas tinggi saat ini. Tetap disiplin, Kapten!")
+            
+        except Exception as e:
+            if "Too Many Requests" in str(e):
+                st.error("🚨 **RATE LIMIT TERDETEKSI!** Yahoo Finance memblokir IP Anda sementara. Jangan tekan tombol Scan lagi, tunggu 15-30 menit.")
+            else:
+                st.error(f"Engine Error: {e}")
