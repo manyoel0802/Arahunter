@@ -4,3 +4,4 @@ tradingview-screener
 yfinance
 plotly
 requests
+pandas_ta
