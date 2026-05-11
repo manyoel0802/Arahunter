@@ -9,7 +9,7 @@ from tradingview_screener import Query, Column
 warnings.filterwarnings('ignore')
 st.set_page_config(page_title="SECTOR RADAR", layout="wide", page_icon="🧭")
 
-# --- TEMA VISUAL UNGU KLASIK (PRESERVED) ---
+# --- TEMA VISUAL UNGU KLASIK ---
 st.markdown("""
     <style>
     .main { background-color: #0d1117; }
@@ -21,13 +21,15 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 🌍 CORE ENGINES ---
+# --- 🌍 CORE ENGINES (LIMITER DIBUKA) ---
 @st.cache_data(ttl=1800)
 def get_market_data():
     try:
+        # 💉 SUNTIKAN: .limit(1000) dipasang untuk menarik seluruh saham, bukan cuma 50
         q = (Query().set_markets('indonesia')
              .select('name','close','sector','Perf.1M','market_cap_basic')
-             .where(Column('market_cap_basic') >= 1e11))
+             .where(Column('market_cap_basic') >= 1e11)
+             .limit(1000)) 
         _, df = q.get_scanner_data()
         return df.dropna(subset=['sector'])
     except: return pd.DataFrame()
@@ -68,7 +70,6 @@ if not df_raw.empty:
     # --- 🚀 EXECUTION ENGINE ---
     if selected_sector != "-- Pilih Sektor --":
         
-        # FIX 1: Reset Index agar pembagian kolom tidak bentrok
         df_sector = df_raw[df_raw['sector'] == selected_sector].reset_index(drop=True)
         total_saham = len(df_sector)
         
@@ -76,7 +77,6 @@ if not df_raw.empty:
         
         if st.button(f"🚀 Mulai Pemindaian Sektor", type="primary"):
             
-            # Menambahkan indikator visual Progress Bar
             progress_bar = st.progress(0, text="Menghidupkan mesin radar...")
             
             col1, col2, col3 = st.columns(3)
@@ -86,11 +86,10 @@ if not df_raw.empty:
             for idx, row in df_sector.iterrows():
                 t_sym = row['name']
                 
-                # Update text progress bar
                 progress_bar.progress((idx + 1) / total_saham, text=f"Memindai: {t_sym} ({idx + 1}/{total_saham} saham)")
                 
                 trend = check_trend(t_sym)
-                time.sleep(0.1) # FIX 2: Delay agar server Yahoo tidak memblokir aplikasi
+                time.sleep(0.1) 
                 
                 if trend == "BULLISH":
                     bullish_count += 1
@@ -111,7 +110,6 @@ if not df_raw.empty:
                 </div>
                 """
                 
-                # Pembagian merata ke 3 kolom berdasarkan index yang sudah di-reset
                 if idx % 3 == 0:
                     with col1: st.markdown(card_html, unsafe_allow_html=True)
                 elif idx % 3 == 1:
